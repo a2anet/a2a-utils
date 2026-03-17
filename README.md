@@ -229,10 +229,23 @@ a2a-utils/
 ├── python/
 │   ├── src/
 │   │   └── a2a_utils/
+│   │       ├── artifacts/         # TextArtifacts, DataArtifacts, minimize_artifacts
+│   │       ├── client/            # AgentManager, A2ASession
+│   │       ├── files/             # FileStore ABC, LocalFileStore
+│   │       ├── tasks/             # JSONTaskStore
 │   │       ├── __init__.py
-│   │       └── __about__.py       # Version (updated by release-please)
+│   │       ├── __about__.py       # Version (updated by release-please)
+│   │       └── types.py           # Typed dataclasses for LLM representations
 │   ├── tests/
 │   │   ├── __init__.py
+│   │   ├── test_a2a_session.py
+│   │   ├── test_agent_manager.py
+│   │   ├── test_data_json_path.py
+│   │   ├── test_data_minimization.py
+│   │   ├── test_data_selection.py
+│   │   ├── test_data_summary.py
+│   │   ├── test_file_store.py
+│   │   ├── test_json_task_store.py
 │   │   └── test_version.py
 │   └── pyproject.toml
 ├── javascript/
