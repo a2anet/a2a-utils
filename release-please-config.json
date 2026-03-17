@@ -1,0 +1,29 @@
+{
+    "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+    "include-component-in-tag": true,
+    "linked-versions": [
+        {
+            "group": "a2a-utils",
+            "components": [
+                "a2a-utils-python",
+                "a2a-utils-javascript"
+            ]
+        }
+    ],
+    "packages": {
+        "python": {
+            "release-type": "python",
+            "package-name": "a2a-utils",
+            "component": "a2a-utils-python",
+            "changelog-path": "CHANGELOG.md",
+            "extra-files": ["src/a2a_utils/__about__.py"]
+        },
+        "javascript": {
+            "release-type": "node",
+            "package-name": "@a2anet/a2a-utils",
+            "component": "a2a-utils-javascript",
+            "changelog-path": "CHANGELOG.md",
+            "extra-files": ["src/index.ts"]
+        }
+    }
+}

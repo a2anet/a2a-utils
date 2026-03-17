@@ -1,0 +1,40 @@
+{
+    "name": "@a2anet/a2a-utils",
+    "version": "0.1.0",
+    "description": "A collection of utilities for discovering, communicating, and authenticating with A2A Servers",
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.js"
+        }
+    },
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": ["dist"],
+    "scripts": {
+        "build": "tsc",
+        "check": "biome check .",
+        "check:fix": "biome check --write .",
+        "typecheck": "tsc --noEmit",
+        "test": "bun test",
+        "test:coverage": "bun test --coverage"
+    },
+    "keywords": ["a2a", "agent-to-agent", "utilities"],
+    "author": "A2A Net <hello@a2anet.com>",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/a2anet/a2a-utils.git"
+    },
+    "bugs": {
+        "url": "https://github.com/a2anet/a2a-utils/issues"
+    },
+    "homepage": "https://github.com/a2anet/a2a-utils#readme",
+    "devDependencies": {
+        "@biomejs/biome": "^1.9.0",
+        "@types/bun": "latest",
+        "typescript": "^5.7.0"
+    },
+    "trustedDependencies": ["@biomejs/biome"]
+}
