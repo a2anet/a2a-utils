@@ -90,17 +90,24 @@ To enable PyPI publishing:
 
 1. **Create a PyPI account** at https://pypi.org
 
-2. **Add Trusted Publisher on PyPI**:
+2. **Publish the first version manually** — this keeps PyPI in sync with npm (both start at 0.1.0, then release-please takes over at 0.2.0):
 
-   - Go to https://pypi.org/manage/account/publishing/
-   - Add a new Pending Trusted Publisher:
-     - **PyPI project name**: a2a-utils
+   ```bash
+   cd python
+   uv build
+   uv publish
+   ```
+
+3. **Add Trusted Publisher on PyPI**:
+
+   - Go to https://pypi.org/manage/project/a2a-utils/settings/publishing/
+   - Add a new Trusted Publisher:
      - **Owner**: a2anet
      - **Repository**: a2a-utils
      - **Workflow name**: `release-please.yml`
      - **Environment name**: `pypi`
 
-3. **Create GitHub Environment**:
+4. **Create GitHub Environment**:
 
    - Go to your repo Settings → Environments
    - Create a new environment named `pypi`
@@ -111,25 +118,33 @@ To enable npm publishing:
 
 1. **Create an npm account** at https://www.npmjs.com
 
-2. **Generate an Access Token on npm**:
+2. **Publish the first version manually** — Trusted Publishing requires the package to already exist on npm:
 
-   - Go to https://www.npmjs.com/settings/~/tokens
-   - Generate a new "Automation" token
-   - Copy the token value
+   ```bash
+   cd javascript
+   npm publish --access public
+   ```
 
-3. **Add Token to GitHub Secrets**:
+3. **Add Trusted Publisher on npm**:
 
-   - Go to your repo Settings → Secrets and variables → Actions
-   - Add a new repository secret named `NPM_TOKEN` with the token value
+   - Go to `https://www.npmjs.com/package/@a2anet/a2a-utils/access`
+   - Under "Publishing access", click "Add trusted publisher" → GitHub Actions
+   - Set the following:
+     - **Owner/Organization**: a2anet
+     - **Repository**: a2a-utils
+     - **Workflow filename**: `release-please.yml`
+     - **Environment**: `npm`
 
 4. **Create GitHub Environment**:
 
    - Go to your repo Settings → Environments
    - Create a new environment named `npm`
 
+5. **(Optional) Lock down token access**: On the npm package settings, select "Require two-factor authentication or an automation or trusted publishing access token" to prevent classic token usage
+
 #### Disable Publishing
 
-If you don't want to publish, remove the `build-python`, `publish-python`, `build-javascript`, and `publish-javascript` jobs from `.github/workflows/release-please.yml`. The release workflow will still create GitHub releases with changelogs.
+If you don't want to publish, remove the `build-python`, `publish-python`, `build-javascript`, and `publish-javascript` jobs from `.github/workflows/release-please.yml`. No secrets need to be removed — both PyPI and npm use Trusted Publishing (OIDC), so there are no tokens to clean up. The release workflow will still create GitHub releases with changelogs.
 
 ### GitHub Repository Settings
 
