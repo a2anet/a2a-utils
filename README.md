@@ -160,7 +160,6 @@ Protect your `main` branch to prevent accidental pushes and ensure code quality:
      - Dismiss stale pull request approvals when new commits are pushed
    - **Require status checks to pass before merging**
      - Require branches to be up to date before merging
-     - Check **"Do not require status checks that are not relevant"** (important for path-filtered CI)
      - Add status checks (after your first CI run):
        - `Lint & Format` (from both CI workflows)
        - `Type Check` (from both CI workflows)
