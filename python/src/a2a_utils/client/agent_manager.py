@@ -32,6 +32,7 @@ class AgentManager:
         self._httpx_client = httpx.AsyncClient()
         self._config = self._load_config(agents)
         self._agents: dict[str, AgentURLAndCustomHeaders] = {}
+        self._init_errors: dict[str, str] = {}
         self._initialized: bool = False
         self._init_lock: asyncio.Lock = asyncio.Lock()
 
@@ -66,13 +67,14 @@ class AgentManager:
             tasks = [self._fetch_agent(agent_id, cfg) for agent_id, cfg in self._config.items()]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
+            self._init_errors = {}
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
                     aid = list(self._config.keys())[i]
                     url = self._config[aid].get("url", "unknown")
-                    logger.error(
-                        f"Error loading agent '{aid}' from {url}: {type(result).__name__}: {result}"
-                    )
+                    error_msg = f"{type(result).__name__}: {result}"
+                    self._init_errors[aid] = error_msg
+                    logger.error(f"Error loading agent '{aid}' from {url}: {error_msg}")
 
             if self._agents:
                 logger.success(f"Successfully initialized {len(self._agents)} agent(s)")
@@ -92,7 +94,8 @@ class AgentManager:
             base_url=base_url,
             agent_card_path=card_path,
         )
-        agent_card = await resolver.get_agent_card()
+        http_kwargs = {"headers": custom_headers} if custom_headers else None
+        agent_card = await resolver.get_agent_card(http_kwargs=http_kwargs)
 
         self._agents[agent_id] = AgentURLAndCustomHeaders(
             agent_card=agent_card,
@@ -136,6 +139,15 @@ class AgentManager:
         """
         await self._ensure_initialized()
         return self._agents.get(agent_id)
+
+    @property
+    def initialization_errors(self) -> dict[str, str]:
+        """Get errors from the most recent initialization attempt.
+
+        Returns:
+            Dict mapping agent_id to error message for agents that failed to load.
+        """
+        return dict(self._init_errors)
 
     async def get_agents(self) -> dict[str, AgentURLAndCustomHeaders]:
         """Get all registered agents.
