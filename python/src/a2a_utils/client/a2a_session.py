@@ -1,5 +1,7 @@
 """A2ASession — main interface for interacting with A2A agents."""
 
+import asyncio
+import time
 import uuid
 from typing import Any, Union
 
@@ -8,29 +10,37 @@ from a2a.client import A2AClient
 from a2a.client.errors import A2AClientJSONRPCError
 from a2a.server.tasks import InMemoryTaskStore, TaskStore
 from a2a.types import (
-    Artifact,
     AgentCard,
+    Artifact,
     DataPart,
     FilePart,
     GetTaskRequest,
     GetTaskSuccessResponse,
     JSONRPCErrorResponse,
     Message,
+    MessageSendConfiguration,
     MessageSendParams,
     Part,
     Role,
     SendMessageRequest,
     SendMessageSuccessResponse,
+    SendStreamingMessageResponse,
+    SendStreamingMessageSuccessResponse,
     Task,
+    TaskArtifactUpdateEvent,
+    TaskIdParams,
     TaskQueryParams,
+    TaskResubscriptionRequest,
+    TaskState,
+    TaskStatusUpdateEvent,
     TextPart,
 )
 from loguru import logger
 
-from .agent_manager import AgentManager
-from ..artifacts import minimize_artifacts, TextArtifacts, DataArtifacts
+from ..artifacts import DataArtifacts, TextArtifacts, minimize_artifacts
 from ..files import FileStore
 from ..types import (
+    TERMINAL_OR_ACTIONABLE_STATES,
     ArtifactForLLM,
     ArtifactSettings,
     DataPartForLLM,
@@ -40,6 +50,7 @@ from ..types import (
     TaskStatusForLLM,
     TextPartForLLM,
 )
+from .agent_manager import AgentManager
 
 TEXT_MINIMIZED_TIP = "Text was minimized. Call view_text_artifact() to view specific line ranges."
 DATA_MINIMIZED_TIP = "Data was minimized. Call view_data_artifact() to navigate to specific data."
@@ -55,11 +66,17 @@ class A2ASession:
         task_store: TaskStore | None = None,
         file_store: FileStore | None = None,
         artifact_settings: ArtifactSettings | None = None,
+        send_message_timeout: float = 60.0,
+        get_task_timeout: float = 60.0,
+        get_task_poll_interval: float = 5.0,
     ) -> None:
         self.agent_manager = agent_manager
         self.task_store: TaskStore = task_store or InMemoryTaskStore()
         self._file_store = file_store
         self._artifact_settings = artifact_settings or ArtifactSettings()
+        self._send_message_timeout = send_message_timeout
+        self._get_task_timeout = get_task_timeout
+        self._get_task_poll_interval = get_task_poll_interval
 
     async def send_message(
         self,
@@ -68,6 +85,7 @@ class A2ASession:
         *,
         context_id: str | None = None,
         task_id: str | None = None,
+        timeout: float | None = None,
     ) -> TaskForLLM | MessageForLLM:
         """Send a message to an A2A agent.
 
@@ -77,6 +95,8 @@ class A2ASession:
             context_id: Optional context ID to continue a conversation.
                 Auto-generated when None.
             task_id: Optional task ID to attach to the message.
+            timeout: HTTP timeout in seconds. Defaults to ``send_message_timeout``
+                from ``__init__``.
 
         Returns:
             TaskForLLM for task responses, MessageForLLM for message-only responses.
@@ -103,14 +123,19 @@ class A2ASession:
 
         send_request = SendMessageRequest(
             id=str(uuid.uuid4()),
-            params=MessageSendParams(message=a2a_message),
+            params=MessageSendParams(
+                message=a2a_message,
+                configuration=MessageSendConfiguration(blocking=False),
+            ),
         )
 
         http_kwargs: dict[str, Any] = {}
         if headers:
             http_kwargs["headers"] = headers
 
-        async with httpx.AsyncClient() as httpx_client:
+        effective_timeout = timeout if timeout is not None else self._send_message_timeout
+        start = time.monotonic()
+        async with httpx.AsyncClient(timeout=httpx.Timeout(effective_timeout)) as httpx_client:
             client = A2AClient(httpx_client=httpx_client, agent_card=agent_card)
             response = await client.send_message(
                 request=send_request,
@@ -138,6 +163,59 @@ class A2ASession:
         task = result
         await self.task_store.save(task)
 
+        # If task is already in a terminal/actionable state, return immediately
+        if task.status.state in TERMINAL_OR_ACTIONABLE_STATES:
+            return await self._build_task_for_llm(task)
+
+        # Task is in a non-terminal state (e.g. working) — monitor with remaining time
+        elapsed = time.monotonic() - start
+        remaining = max(0, effective_timeout - elapsed)
+        if remaining > 0:
+            supports_streaming = (
+                agent_card.capabilities is not None and agent_card.capabilities.streaming
+            )
+            if supports_streaming:
+                task = await self._get_task_streaming(
+                    agent_card, headers, task.id, remaining
+                )
+            else:
+                task = await self._get_task_polling(
+                    agent_card, headers, task.id, remaining, self._get_task_poll_interval
+                )
+            await self.task_store.save(task)
+
+        return await self._build_task_for_llm(task)
+
+    async def _build_message_for_llm(self, message: Message) -> MessageForLLM:
+        """Convert an A2A Message to MessageForLLM.
+
+        Combines all TextParts into a single TextPartForLLM.
+        FileParts are ignored; file handling is done at the artifact level.
+        """
+        parts: list[TextPartForLLM | DataPartForLLM | FilePartForLLM] = []
+
+        # Combine all text parts
+        text_segments: list[str] = []
+        for part in message.parts:
+            if isinstance(part.root, TextPart):
+                text_segments.append(part.root.text)
+
+        if text_segments:
+            parts.append(TextPartForLLM(kind="text", text="".join(text_segments)))
+
+        # Each data part stays separate
+        for part in message.parts:
+            if isinstance(part.root, DataPart):
+                parts.append(DataPartForLLM(kind="data", data=part.root.data))
+
+        return MessageForLLM(
+            context_id=message.context_id,
+            kind="message",
+            parts=parts,
+        )
+
+    async def _build_task_for_llm(self, task: Task) -> TaskForLLM:
+        """Convert a Task to TaskForLLM with artifact minimization and file saving."""
         # Save files if file_store is configured
         saved_file_paths: dict[str, list[str]] | None = None
         if self._file_store is not None and task.artifacts:
@@ -169,7 +247,7 @@ class A2ASession:
 
         return TaskForLLM(
             id=task.id,
-            context_id=context_id,
+            context_id=task.context_id,
             kind="task",
             status=TaskStatusForLLM(
                 state=task.status.state,
@@ -178,33 +256,164 @@ class A2ASession:
             artifacts=minimized,
         )
 
-    async def _build_message_for_llm(self, message: Message) -> MessageForLLM:
-        """Convert an A2A Message to MessageForLLM.
+    async def get_task(
+        self,
+        agent_id: str,
+        task_id: str,
+        *,
+        timeout: float | None = None,
+        poll_interval: float | None = None,
+    ) -> TaskForLLM:
+        """Get the current state of a task, monitoring until terminal/actionable state.
 
-        Combines all TextParts into a single TextPartForLLM.
-        FileParts are ignored; file handling is done at the artifact level.
+        If the remote agent supports streaming, uses SSE resubscription for real-time
+        updates. Otherwise, polls at regular intervals.
+
+        On monitoring timeout, returns the current task state (which may still be
+        non-terminal, e.g. ``working``). The only errors from ``get_task`` are failed
+        HTTP requests (agent down, network error).
+
+        Args:
+            agent_id: Registered agent identifier.
+            task_id: Task ID from a previous ``send_message`` call.
+            timeout: Total monitoring timeout in seconds. Defaults to
+                ``get_task_timeout`` from ``__init__``.
+            poll_interval: Interval between polls in seconds (used when streaming
+                is not supported). Defaults to ``get_task_poll_interval`` from
+                ``__init__``.
+
+        Returns:
+            TaskForLLM with the current task state. If monitoring times out, the
+            returned task may still be in a non-terminal state.
+
+        Raises:
+            ValueError: If agent is not found.
         """
-        parts: list[TextPartForLLM | DataPartForLLM | FilePartForLLM] = []
-
-        # Combine all text parts
-        text_segments: list[str] = []
-        for part in message.parts:
-            if isinstance(part.root, TextPart):
-                text_segments.append(part.root.text)
-
-        if text_segments:
-            parts.append(TextPartForLLM(kind="text", text="".join(text_segments)))
-
-        # Each data part stays separate
-        for part in message.parts:
-            if isinstance(part.root, DataPart):
-                parts.append(DataPartForLLM(kind="data", data=part.root.data))
-
-        return MessageForLLM(
-            context_id=message.context_id,
-            kind="message",
-            parts=parts,
+        agent_card, headers = await self._resolve_agent(agent_id)
+        effective_timeout = timeout if timeout is not None else self._get_task_timeout
+        effective_poll_interval = (
+            poll_interval if poll_interval is not None else self._get_task_poll_interval
         )
+
+        supports_streaming = (
+            agent_card.capabilities is not None and agent_card.capabilities.streaming
+        )
+
+        if supports_streaming:
+            task = await self._get_task_streaming(agent_card, headers, task_id, effective_timeout)
+        else:
+            task = await self._get_task_polling(
+                agent_card, headers, task_id, effective_timeout, effective_poll_interval
+            )
+
+        await self.task_store.save(task)
+        return await self._build_task_for_llm(task)
+
+    async def _get_task_streaming(
+        self,
+        agent_card: AgentCard,
+        headers: dict[str, str],
+        task_id: str,
+        timeout: float,
+    ) -> Task:
+        """Monitor a task via SSE resubscription, falling back to a final fetch."""
+        http_kwargs: dict[str, Any] = {}
+        if headers:
+            http_kwargs["headers"] = headers
+
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout)) as httpx_client:
+            client = A2AClient(httpx_client=httpx_client, agent_card=agent_card)
+
+            resubscribe_request = TaskResubscriptionRequest(
+                id=str(uuid.uuid4()),
+                params=TaskIdParams(id=task_id),
+            )
+
+            reached_terminal = False
+            try:
+                async with asyncio.timeout(timeout):
+                    async for sse_response in client.resubscribe(
+                        request=resubscribe_request,
+                        http_kwargs=http_kwargs if http_kwargs else None,
+                    ):
+                        actual = (
+                            sse_response.root if hasattr(sse_response, "root") else sse_response
+                        )
+                        if not isinstance(actual, SendStreamingMessageSuccessResponse):
+                            continue
+
+                        result = actual.result
+                        if isinstance(result, TaskStatusUpdateEvent):
+                            if result.status.state in TERMINAL_OR_ACTIONABLE_STATES:
+                                reached_terminal = True
+                                break
+                        elif isinstance(result, Task):
+                            if result.status.state in TERMINAL_OR_ACTIONABLE_STATES:
+                                reached_terminal = True
+                                break
+            except TimeoutError:
+                logger.info(f"Task {task_id} still in working state after {timeout}s")
+
+            # Final fetch to get the complete Task with all artifacts
+            return await self._fetch_task(client, task_id, http_kwargs)
+
+    async def _get_task_polling(
+        self,
+        agent_card: AgentCard,
+        headers: dict[str, str],
+        task_id: str,
+        timeout: float,
+        poll_interval: float,
+    ) -> Task:
+        """Monitor a task by polling at regular intervals."""
+        http_kwargs: dict[str, Any] = {}
+        if headers:
+            http_kwargs["headers"] = headers
+
+        start = time.monotonic()
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(self._send_message_timeout)
+        ) as httpx_client:
+            client = A2AClient(httpx_client=httpx_client, agent_card=agent_card)
+
+            while True:
+                task = await self._fetch_task(client, task_id, http_kwargs)
+                if task.status.state in TERMINAL_OR_ACTIONABLE_STATES:
+                    return task
+                elapsed = time.monotonic() - start
+                if elapsed >= timeout:
+                    logger.info(f"Task {task_id} still in working state after {timeout}s")
+                    return task
+                await asyncio.sleep(poll_interval)
+
+    async def _fetch_task(
+        self,
+        client: A2AClient,
+        task_id: str,
+        http_kwargs: dict[str, Any],
+    ) -> Task:
+        """Fetch a task via A2AClient.get_task()."""
+        get_request = GetTaskRequest(
+            id=str(uuid.uuid4()),
+            params=TaskQueryParams(id=task_id),
+        )
+        response = await client.get_task(
+            request=get_request,
+            http_kwargs=http_kwargs if http_kwargs else None,
+        )
+        actual = response.root if hasattr(response, "root") else response
+
+        if isinstance(actual, JSONRPCErrorResponse):
+            raise A2AClientJSONRPCError(actual)
+
+        if not isinstance(actual, GetTaskSuccessResponse):
+            raise ValueError(f"Unexpected response type: {type(actual).__name__}")
+
+        result = actual.result
+        if not isinstance(result, Task):
+            raise ValueError(f"Expected Task response, got {type(result).__name__}")
+
+        return result
 
     async def view_text_artifact(
         self,
@@ -369,7 +578,9 @@ class A2ASession:
         agent = await self.agent_manager.get_agent(agent_id)
         if agent is not None:
             try:
-                async with httpx.AsyncClient() as httpx_client:
+                async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(self._get_task_timeout)
+                ) as httpx_client:
                     client = A2AClient(
                         httpx_client=httpx_client,
                         agent_card=agent.agent_card,

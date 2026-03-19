@@ -124,6 +124,18 @@ This package introduces `FileStore`, an abstract class similar to the `TaskStore
 It is out of this package's scope to implement tools to interact with them as A2A supports sending every type of file.
 However, if the client agent has access to Bash commands and the files are saved locally, it should be straightforward for it to interact with them.
 
+### How should the client agent handle Tasks that take a long time to complete?
+
+- The default HTTP timeout is 5 seconds.
+Remote agents often take longer than this to send a response, causing `send_message` to timeout.
+It's also not good practice to set a long timeouts (e.g. more than 1 minute).
+Some agents return a Task in a non-terminal state (e.g. `working`) immediately and continue processing in the background.
+
+This package sets a default `send_message` timeout of 60 seconds (configurable via `send_message_timeout`).
+It also introduces `get_task`, a more advanced version of the A2A SDK's `get_task` which monitors a Task until it reaches a terminal state (`completed`, `canceled`, `failed`, `rejected`) or an actionable state (`input_required`, `auth_required`).
+`get_task` uses SSE resubscription for real-time updates; otherwise it polls at a configurable interval (default 5 seconds).
+Both the timeout (default 60 seconds) and poll interval can be overridden per-call by the client agent.
+
 ## 📖 API Reference
 
 ### A2ASession
@@ -149,6 +161,9 @@ session = A2ASession(
 | `task_store` | `TaskStore \| None` | No | Task store for persistence (default: `InMemoryTaskStore`) |
 | `file_store` | `FileStore \| None` | No | File store for saving file artifacts (default: `None`) |
 | `artifact_settings` | `ArtifactSettings \| None` | No | Minimization/view settings (default: `ArtifactSettings()`) |
+| `send_message_timeout` | `float` | No | HTTP timeout in seconds for `send_message` (default: `60.0`) |
+| `get_task_timeout` | `float` | No | Total monitoring timeout in seconds for `get_task`. Also used as the HTTP timeout for artifact retrieval in `view_text_artifact`/`view_data_artifact` (default: `60.0`) |
+| `get_task_poll_interval` | `float` | No | Interval in seconds between `get_task` polls (default: `5.0`) |
 
 `file_store` determines what `FilePartForLLM` shows:
 
@@ -177,7 +192,7 @@ settings = ArtifactSettings(
 | `minimized_object_string_length` | `int` | `5,000` | Max length for individual string values within minimized data objects |
 | `view_artifact_character_limit` | `int` | `50,000` | Character limit for output from `view_text_artifact` / `view_data_artifact` |
 
-#### `async send_message(agent_id: str, message: str, *, context_id: str | None = None, task_id: str | None = None) -> TaskForLLM | MessageForLLM`
+#### `async send_message(agent_id: str, message: str, *, context_id: str | None = None, task_id: str | None = None, timeout: float | None = None) -> TaskForLLM | MessageForLLM`
 
 Send a message to an A2A agent. The returned task is automatically saved to the task store. Artifacts are auto-minimized, and file parts are saved via the file store.
 
@@ -187,6 +202,7 @@ Send a message to an A2A agent. The returned task is automatically saved to the 
 | `message` | `str` | Yes | The message content to send |
 | `context_id` | `str \| None` | No | Context ID to continue a conversation (auto-generated when None) |
 | `task_id` | `str \| None` | No | Task ID to attach to the message |
+| `timeout` | `float \| None` | No | Override HTTP timeout in seconds (default: `send_message_timeout`) |
 
 ```python
 from a2a_utils import TaskForLLM, MessageForLLM
@@ -261,6 +277,44 @@ response_2 = await session.send_message(
 ```
 
 **Returns:** [`TaskForLLM`](#taskforllm) | [`MessageForLLM`](#messageforllm)
+
+#### `async get_task(agent_id: str, task_id: str, *, timeout: float | None = None, poll_interval: float | None = None) -> TaskForLLM`
+
+Get the current state of a task. Monitors until a terminal state (`completed`, `canceled`, `failed`, `rejected`) or actionable state (`input_required`, `auth_required`) is reached, or until timeout. Uses SSE resubscription if the agent supports streaming, otherwise polls at regular intervals.
+
+On monitoring timeout, returns the current task state (which may still be non-terminal, e.g. `working`). The only errors from `get_task` are failed HTTP requests (agent down, network error).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `agent_id` | `str` | Yes | Registered agent identifier |
+| `task_id` | `str` | Yes | Task ID from a previous `send_message` call |
+| `timeout` | `float \| None` | No | Override monitoring timeout in seconds (default: `get_task_timeout`) |
+| `poll_interval` | `float \| None` | No | Override interval between polls in seconds (default: `get_task_poll_interval`) |
+
+```python
+result = await session.get_task("research-bot", "task-123")
+```
+
+Example result:
+
+```json
+{
+    "id": "task-123",
+    "context_id": "ctx-456",
+    "kind": "task",
+    "status": {
+        "state": "completed",
+        "message": {
+            "context_id": "ctx-456",
+            "kind": "message",
+            "parts": [{"kind": "text", "text": "Processing complete."}]
+        }
+    },
+    "artifacts": []
+}
+```
+
+**Returns:** [`TaskForLLM`](#taskforllm)
 
 #### `async view_text_artifact(agent_id, task_id, artifact_id, *, line_start=None, line_end=None, character_start=None, character_end=None) -> ArtifactForLLM`
 
@@ -363,75 +417,6 @@ manager = AgentManager("./agents.json")
 manager = AgentManager()
 ```
 
-#### `async add_agent(agent_id: str, url: str, custom_headers: dict[str, str] | None = None) -> None`
-
-Register a new agent at runtime.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `agent_id` | `str` | Yes | User-defined agent identifier |
-| `url` | `str` | Yes | Agent card URL |
-| `custom_headers` | `dict[str, str] \| None` | No | Custom HTTP headers |
-
-**Raises:** `ValueError` if `agent_id` is already registered.
-
-```python
-await manager.add_agent(
-    "code-reviewer",
-    "https://review.example.com/.well-known/agent-card.json",
-    custom_headers={"X-API-Key": "key_123"},
-)
-```
-
-#### `async get_agent(agent_id: str) -> AgentURLAndCustomHeaders | None`
-
-Retrieve agent by ID.
-Note: this should NOT be added to the LLM's context, use `get_agent_for_llm` instead.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `agent_id` | `str` | Yes | User-defined agent identifier |
-
-**Returns:** [`AgentURLAndCustomHeaders`](#agenturlandcustomheaders) | `None`
-
-```python
-agent = await manager.get_agent("language-translator")
-```
-
-Example result:
-
-```python
-AgentURLAndCustomHeaders(
-    agent_card=AgentCard(
-        name="Universal Translator",
-        description="Translate text and audio between 50+ languages",
-        url="https://translate.example.com",
-        version="1.0.0",
-        capabilities=AgentCapabilities(streaming=False, pushNotifications=False),
-        skills=[
-            AgentSkill(
-                id="translate-text",
-                name="Translate Text",
-                description="Translate text between any supported language pair",
-                tags=["translate", "text", "language"],
-                examples=["Translate 'hello' to French"],
-            ),
-            AgentSkill(
-                id="translate-audio",
-                name="Translate Audio",
-                description="Translate audio between any supported language pair",
-                tags=["translate", "audio", "language"],
-            )
-        ],
-        defaultInputModes=["text", "audio/mpeg"],
-        defaultOutputModes=["text", "audio/mpeg"],
-    ),
-    custom_headers={"Authorization": "Bearer tok_123"},
-)
-```
-
-Returns `None` if the agent ID is not registered.
-
 #### `async get_agents() -> dict[str, AgentURLAndCustomHeaders]`
 
 Get all registered agents.
@@ -463,28 +448,6 @@ Example result:
         ),
         custom_headers={"X-API-Key": "key_123"},
     ),
-}
-```
-
-#### `async get_agent_for_llm(agent_id: str, detail: str = "basic") -> dict[str, Any] | None`
-
-Generate summary for a single agent.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `agent_id` | `str` | Yes | User-defined agent identifier |
-| `detail` | `str` | No | Detail level: `"name"`, `"basic"` (default), `"skills"`, or `"full"` |
-
-**Returns:** `dict[str, Any] | None` — summary dict or `None` if not found.
-
-```python
-summary = await manager.get_agent_for_llm("language-translator")
-```
-
-```json
-{
-  "name": "Universal Translator",
-  "description": "Translate text and audio between 50+ languages"
 }
 ```
 
@@ -584,6 +547,132 @@ summaries = await manager.get_agents_for_llm("full")
     ]
   }
 }
+```
+
+#### `async get_agent(agent_id: str) -> AgentURLAndCustomHeaders | None`
+
+Retrieve agent by ID.
+Note: this should NOT be added to the LLM's context, use `get_agent_for_llm` instead.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `agent_id` | `str` | Yes | User-defined agent identifier |
+
+**Returns:** [`AgentURLAndCustomHeaders`](#agenturlandcustomheaders) | `None`
+
+```python
+agent = await manager.get_agent("language-translator")
+```
+
+Example result:
+
+```python
+AgentURLAndCustomHeaders(
+    agent_card=AgentCard(
+        name="Universal Translator",
+        description="Translate text and audio between 50+ languages",
+        url="https://translate.example.com",
+        version="1.0.0",
+        capabilities=AgentCapabilities(streaming=False, pushNotifications=False),
+        skills=[
+            AgentSkill(
+                id="translate-text",
+                name="Translate Text",
+                description="Translate text between any supported language pair",
+                tags=["translate", "text", "language"],
+                examples=["Translate 'hello' to French"],
+            ),
+            AgentSkill(
+                id="translate-audio",
+                name="Translate Audio",
+                description="Translate audio between any supported language pair",
+                tags=["translate", "audio", "language"],
+            )
+        ],
+        defaultInputModes=["text", "audio/mpeg"],
+        defaultOutputModes=["text", "audio/mpeg"],
+    ),
+    custom_headers={"Authorization": "Bearer tok_123"},
+)
+```
+
+Returns `None` if the agent ID is not registered.
+
+#### `async get_agent_for_llm(agent_id: str, detail: str = "basic") -> dict[str, Any] | None`
+
+Generate summary for a single agent.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `agent_id` | `str` | Yes | User-defined agent identifier |
+| `detail` | `str` | No | Detail level: `"name"`, `"basic"` (default), `"skills"`, or `"full"` |
+
+**Returns:** `dict[str, Any] | None` — summary dict or `None` if not found.
+
+```python
+summary = await manager.get_agent_for_llm("language-translator")
+```
+
+```json
+{
+  "name": "Universal Translator",
+  "description": "Translate text and audio between 50+ languages"
+}
+```
+
+#### `async get_agent_card_from_url(url: str, detail: str = "basic") -> dict[str, Any]`
+
+Fetch and format an agent card from a URL without registering it. Use this to preview an agent before adding it with `add_agent`.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `url` | `str` | Yes | Full Agent Card URL |
+| `detail` | `str` | No | Detail level: `"name"`, `"basic"` (default), `"skills"`, or `"full"` |
+
+**Returns:** `dict[str, Any]`
+
+```python
+card = await manager.get_agent_card_from_url(
+    "https://example.com/.well-known/agent-card.json",
+    detail="full",
+)
+```
+
+```json
+{
+  "name": "Universal Translator",
+  "description": "Translate text and audio between 50+ languages",
+  "skills": [
+    {
+      "name": "Translate Text",
+      "description": "Translate text between any supported language pair"
+    },
+    {
+      "name": "Translate Audio",
+      "description": "Translate audio between any supported language pair"
+    }
+  ]
+}
+```
+
+#### `async add_agent(agent_id: str, url: str, custom_headers: dict[str, str] | None = None) -> None`
+
+Register a new agent at runtime.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `agent_id` | `str` | Yes | User-defined agent identifier |
+| `url` | `str` | Yes | Agent card URL |
+| `custom_headers` | `dict[str, str] \| None` | No | Custom HTTP headers |
+
+**Raises:** `ValueError` if `agent_id` is already registered.
+
+```python
+await manager.add_agent(
+    "code-reviewer",
+    "https://review.example.com/.well-known/agent-card.json",
+    custom_headers={"X-API-Key": "key_123"},
+)
 ```
 
 ### 💾 JSONTaskStore

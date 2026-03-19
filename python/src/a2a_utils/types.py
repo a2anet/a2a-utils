@@ -12,6 +12,18 @@ class AgentURLAndCustomHeaders:
     custom_headers: dict[str, str] = field(default_factory=dict)
 
 
+TERMINAL_OR_ACTIONABLE_STATES = frozenset(
+    {
+        TaskState.completed,
+        TaskState.canceled,
+        TaskState.failed,
+        TaskState.rejected,
+        TaskState.input_required,
+        TaskState.auth_required,
+    }
+)
+
+
 @dataclass(frozen=True)
 class ArtifactSettings:
     """Configuration for artifact minimization and viewing."""

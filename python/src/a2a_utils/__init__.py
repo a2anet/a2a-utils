@@ -13,6 +13,7 @@ from a2a_utils.artifacts import (
 from a2a_utils.files import FileStore, LocalFileStore
 from a2a_utils.tasks.json_task_store import JSONTaskStore
 from a2a_utils.types import (
+    TERMINAL_OR_ACTIONABLE_STATES,
     AgentURLAndCustomHeaders,
     ArtifactForLLM,
     ArtifactSettings,
@@ -38,6 +39,7 @@ __all__ = [
     "FileStore",
     "LocalFileStore",
     # types
+    "TERMINAL_OR_ACTIONABLE_STATES",
     "AgentURLAndCustomHeaders",
     "ArtifactForLLM",
     "ArtifactSettings",

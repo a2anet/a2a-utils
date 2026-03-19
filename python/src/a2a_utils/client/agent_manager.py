@@ -3,7 +3,7 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 import httpx
@@ -20,7 +20,12 @@ class AgentManager:
     Agents are configured via a dict mapping agent_id to config, or a JSON file path.
     """
 
-    def __init__(self, agents: dict[str, dict[str, Any]] | str | Path | None = None) -> None:
+    def __init__(
+        self,
+        agents: dict[str, dict[str, Any]] | str | Path | None = None,
+        *,
+        timeout: float = 15.0,
+    ) -> None:
         """Initialize the agent manager.
 
         Args:
@@ -28,8 +33,9 @@ class AgentManager:
               - dict: {"agent-id": {"url": "https://...", "custom_headers": {"X-API-Key": "..."}}}
               - str/Path: path to agents.json file with the same structure
               - None: empty, add agents later
+            timeout: HTTP timeout in seconds for fetching agent cards (default: 15s).
         """
-        self._httpx_client = httpx.AsyncClient()
+        self._timeout = timeout
         self._config = self._load_config(agents)
         self._agents: dict[str, AgentURLAndCustomHeaders] = {}
         self._init_errors: dict[str, str] = {}
@@ -89,13 +95,14 @@ class AgentManager:
         custom_headers = config.get("custom_headers", {})
 
         base_url, card_path = self._parse_agent_card_url(url)
-        resolver = A2ACardResolver(
-            httpx_client=self._httpx_client,
-            base_url=base_url,
-            agent_card_path=card_path,
-        )
-        http_kwargs = {"headers": custom_headers} if custom_headers else None
-        agent_card = await resolver.get_agent_card(http_kwargs=http_kwargs)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(self._timeout)) as httpx_client:
+            resolver = A2ACardResolver(
+                httpx_client=httpx_client,
+                base_url=base_url,
+                agent_card_path=card_path,
+            )
+            http_kwargs = {"headers": custom_headers} if custom_headers else None
+            agent_card = await resolver.get_agent_card(http_kwargs=http_kwargs)
 
         self._agents[agent_id] = AgentURLAndCustomHeaders(
             agent_card=agent_card,
@@ -158,7 +165,9 @@ class AgentManager:
         await self._ensure_initialized()
         return dict(self._agents)
 
-    def _format_agent_for_llm(self, card: AgentCard, detail: str) -> dict[str, Any]:
+    def _format_agent_for_llm(
+        self, card: AgentCard, detail: Literal["name", "basic", "skills", "full"]
+    ) -> dict[str, Any]:
         """Format a single agent card into a summary dict.
 
         Args:
@@ -191,7 +200,9 @@ class AgentManager:
             }
 
     async def get_agent_for_llm(
-        self, agent_id: str, detail: str = "basic"
+        self,
+        agent_id: str,
+        detail: Literal["name", "basic", "skills", "full"] = "basic",
     ) -> dict[str, Any] | None:
         """Generate summary for a single agent.
 
@@ -208,7 +219,33 @@ class AgentManager:
             return None
         return self._format_agent_for_llm(agent.agent_card, detail)
 
-    async def get_agents_for_llm(self, detail: str = "basic") -> dict[str, dict[str, Any]]:
+    async def get_agent_card_from_url(
+        self,
+        url: str,
+        detail: Literal["name", "basic", "skills", "full"] = "basic",
+    ) -> dict[str, Any]:
+        """Fetch and format an agent card from a URL without registering it.
+
+        Args:
+            url: Full Agent Card URL.
+            detail: Detail level — "name", "basic" (default), "skills", or "full".
+
+        Returns:
+            Formatted agent card summary dict.
+        """
+        base_url, card_path = self._parse_agent_card_url(url)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(self._timeout)) as httpx_client:
+            resolver = A2ACardResolver(
+                httpx_client=httpx_client,
+                base_url=base_url,
+                agent_card_path=card_path,
+            )
+            card = await resolver.get_agent_card()
+        return self._format_agent_for_llm(card, detail)
+
+    async def get_agents_for_llm(
+        self, detail: Literal["name", "basic", "skills", "full"] = "basic"
+    ) -> dict[str, dict[str, Any]]:
         """Generate summary of all agents.
 
         Args:

@@ -60,6 +60,25 @@ class TestA2ASessionInit:
         session = A2ASession(agent_manager=manager)
         assert session._file_store is None
 
+    def test_default_timeouts(self) -> None:
+        manager = AgentManager(None)
+        session = A2ASession(agent_manager=manager)
+        assert session._send_message_timeout == 60.0
+        assert session._get_task_timeout == 60.0
+        assert session._get_task_poll_interval == 5.0
+
+    def test_custom_timeouts(self) -> None:
+        manager = AgentManager(None)
+        session = A2ASession(
+            agent_manager=manager,
+            send_message_timeout=120.0,
+            get_task_timeout=30.0,
+            get_task_poll_interval=2.0,
+        )
+        assert session._send_message_timeout == 120.0
+        assert session._get_task_timeout == 30.0
+        assert session._get_task_poll_interval == 2.0
+
 
 class TestSendMessageValidation:
     @pytest.mark.asyncio
@@ -69,6 +88,16 @@ class TestSendMessageValidation:
         session = A2ASession(agent_manager=manager)
         with pytest.raises(ValueError, match="not found"):
             await session.send_message("nonexistent", "hello")
+
+
+class TestGetTaskValidation:
+    @pytest.mark.asyncio
+    async def test_agent_id_not_found(self) -> None:
+        manager = AgentManager(None)
+        manager._initialized = True
+        session = A2ASession(agent_manager=manager)
+        with pytest.raises(ValueError, match="not found"):
+            await session.get_task("nonexistent", "task-123")
 
 
 class TestGetArtifact:
