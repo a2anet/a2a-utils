@@ -2,10 +2,28 @@
 
 [![PyPI - Version](https://img.shields.io/pypi/v/a2a-utils.svg)](https://pypi.org/project/a2a-utils) [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/a2a-utils.svg)](https://pypi.org/project/a2a-utils) [![PyPI - Downloads](https://img.shields.io/pypi/dm/a2a-utils)](https://pypi.org/project/a2a-utils) [![License](https://img.shields.io/github/license/a2anet/a2a-utils)](https://github.com/a2anet/a2a-utils/blob/main/LICENSE) [![A2A Protocol](https://img.shields.io/badge/A2A-Protocol-blue)](https://a2a-protocol.org) [![Discord](https://img.shields.io/discord/1391916121589944320?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/674NGXpAjU)
 
-This package is a collection of utility functions that allows agents to discover, communicate, and authenticate with [A2A Servers (remote agents)](https://a2a-protocol.org/latest/topics/key-concepts/#core-actors-in-a2a-interactions).
-It does this by introudcing a number of classes (e.g. `A2ASession`) that solve typical problems associated with implementing the [A2A Client](https://a2a-protocol.org/latest/topics/key-concepts/#core-actors-in-a2a-interactions) in an LLM.
-For example, how should a remote agent's identity and capabilities be represented to the client agent? What should the client agent be shown from the remote agent's response? And how should the client agent handle large Artifacts that would overload the context?
-See the "💡 Problems and Solutions" section to learn more about the problems and solutions.
+This package is a comprehensive set of utility functions for using [A2A servers (remote agents)](https://a2a-protocol.org/latest/topics/key-concepts/#core-actors-in-a2a-interactions), it powers the [A2A MCP Server](https://github.com/a2anet/a2a-mcp).
+
+`A2ASession` is at the core of the package, it takes an `AgentManager` (for connecting to agents, viewing Agent Cards, etc.), and optionally a `TaskStore` (for saving Tasks) and `FileStore` (for saving files).
+It has two methods, `send_message` and `get_task`.
+
+These methods are more sophisticated versions of the same methods in the [A2A SDKs](https://github.com/orgs/a2aproject/repositories).
+For example, `send_message` abstracts retrieving Agent Cards, sending headers, etc., allowing you to send a message with an agent's ID, e.g. `send_message("research-bot", "Find recent papers on quantum computing")`.
+It also sends the message as non-blocking and streams the response until the Task reaches a terminal state or times out.
+If `send_message` times out, `get_task` can be called with the Task ID to start streaming the response again.
+If `TaskStore` and `FileStore` are set, the Task, Artifacts, and files will automatically be saved.
+
+`AgentManager` stores user-defined agent IDs that link to Agent Card URLs and headers.
+Agents are stored this way so that Agent Card URLs and headers are not exposed to the agent and because Agent Cards can be dynamic (i.e. change depending on the headers).
+It has five methods, `get_agents`, `get_agents_for_llm`, `get_agent`, `get_agent_for_llm`, and `add_agent`.
+See the API reference below for more information.
+
+Lastly, `A2ATools` is the most sophisticated class in the package, it takes an `A2ASession` and provides six LLM-friendly tools that can be used out-of-the-box with agent frameworks: `get_agents`, `get_agent`, `send_message`, `get_task`, `view_text_artifact`, and `view_data_artifact`.
+The tools are based on [Writing effective tools for AI agents](https://www.anthropic.com/engineering/writing-tools-for-agents): they have LLM-friendly docstrings, return JSON-serialisable objects, and return actionable error messages.
+
+Tool outputs are also optimised for LLMs.
+For example, `get_agents` returns a list of agent names and descriptions, whereas `get_agent` also returns an agent's skill names and descriptions.
+`send_message` and `get_task` return LLM-friendly types that are subsets of A2A types (e.g. `TaskForLLM`, `MessageForLLM`, and `ArtifactForLLM`) and automatically minimise large Artifacts, which can be viewed with `view_text_artifact` and `view_data_artifact`.
 
 ## 📦 Installation
 
@@ -23,156 +41,64 @@ uv add a2a-utils
 
 ## 🚀 Quick Start
 
+Create an `A2ASession`, then `A2ATools` to get LLM-friendly tools that can be used out-of-the-box with agent frameworks.
+
 ```python
 from pathlib import Path
 
-from a2a_utils import (
-    AgentManager,
-    A2ASession,
-    JSONTaskStore,
-    LocalFileStore,
-    TaskForLLM,
+from a2a_utils import A2ATools, A2ASession, AgentManager, JSONTaskStore, LocalFileStore
+from langchain.agents import create_agent
+from langchain_openai import ChatOpenAI
+
+agent_manager = AgentManager({
+    "weather": {"url": "https://weather.example.com/.well-known/agent-card.json"},
+    "research-bot": {
+        "url": "https://research.example.com/.well-known/agent-card.json",
+        "custom_headers": {"X-API-Key": "key_123"},
+    },
+})
+
+a2a_session = A2ASession(
+    agent_manager=agent_manager, 
+    task_store=JSONTaskStore(Path("./storage/tasks")), 
+    file_store=LocalFileStore(Path("./storage/files"))
 )
 
-async def main() -> None:
-    # Add remote agents
-    agent_manager: AgentManager = AgentManager({
-        "weather": {
-            "url": "https://weather.example.com/.well-known/agent-card.json",
-        },
-        "stock-tracker": {
-            "url": "https://example.com/finance-agent/agent-card.json",
-            "custom_headers": {"X-API-Key": "key_123"},
-        },
-    })
+a2a_tools = A2ATools(a2a_session)
 
-    # Initiate A2ASession
-    a2a_session: A2ASession = A2ASession(
-        agent_manager=agent_manager,
-        # Save Tasks as JSON files
-        task_store=JSONTaskStore(Path("./storage/tasks")),
-        # Save Artifact files (PDFs, images, etc.)
-        file_store=LocalFileStore(Path("./storage/files")),
-    )
+model = ChatOpenAI(model="gpt-5.1", reasoning={"effort": "medium"})
 
-    # Send a message
-    # Returns LLM-friendly TaskForLLM or MessageForLLM
-    response: TaskForLLM | MessageForLLM = await a2a_session.send_message(
-        "weather", "What's the forecast for Tokyo?"
-    )
-
-    # Continue the conversation
-    response_2: TaskForLLM | MessageForLLM = await a2a_session.send_message(
-        "weather",
-        "How about Osaka?",
-        context_id=response.context_id,
-    )
+agent = create_agent(model, tools=a2a_tools)
 ```
 
-## 💡 Problems and Solutions
+## 💡 Design Decisions
 
-### How should a remote agent's identity be represented to the client agent?
-
-- Agent name can't be used because two remote agents might have the same name.
-Agent Card URL can't be used because authentication headers sent to the agent (e.g. `X-API-Key`) might change the agent.
-Authentication headers can't be exposed to the agent for security reasons.
-
-This package introduces `AgentManager` and agent IDs that stores an Agent Card URL and custom headers.
-The client agent can use the agent ID to send messages to the remote agent without exposing the Agent Card URL or authentication headers to it.
-
-### How should a remote agent's capabilities be represented to the client agent?
-
-- The agent's name, description, skill names, and skill descriptions are useful to the client agent.
-However, showing everything at once to the client agent could overload the context.
-The client agent should be able to view the remote agents in more depth if they need to.
-
-This package introduces `AgentManager` and `get_agents_for_llm` method which returns a summary of the agents at different detail levels.
-The client agent can view the remote agent's Agent Card in more detail with the `get_agent_for_llm` method.
-
-### What should the client agent be shown from the remote agent's response?
-
-- A remote agent returns a Task or Message.
-A Task is a complicated object containing the Task Status, Aritfacts, a history of Task Status updates, metadata, etc. not all of which should be added to the LLM's context window.
-However, it's necessary to share some elements of the response with the client agent.
-For example, the context ID is required to continue the conversation, Artifacts are the result of the Task, etc.
-
-This package introduces LLM-friendly types that are subsets of A2A types: `TaskForLLM`, `MessageForLLM`, `TaskStatusForLLM`, `ArtifactForLLM`, `TextPartForLLM`, `DataPartForLLM`, and `FilePartForLLM`.
-
-### How should the client agent handle large Artifacts that would overload the context?
-
-- Most LLMs have a context window of 128K tokens (~512K characters).
-Artifacts can easily exceed this. Even if they don't exceed this, tokens increase cost and degrade LLM output quality.
-
-This package automatically summarises Artifacts that are more than `send_message_character_limit` characters when JSON stringified.
-For example, for text Artifacts the first `send_message_character_limit / 2` characters are shown, followed by `[... X characters omitted ...]`, followed by the last `send_message_character_limit / 2` characters.
-To view the characters that were omitted, the LLM can use the `view_text_artifact` method, specifying the lines to view.
-
-### How should the client agent ensure that it has access to Tasks and Artifacts if the remote agent goes offline or has a retention policy?
-
-- Agent conversations can be continued days or weeks after they started.
-In that time, the remote agent might have gone offline or only keep Tasks and Artifacts for X days.
-
-This package introduces `A2ASession` and a `JSONTaskStore` which automatically saves Task and Artifact(s) as JSON files.
-When the client agent uses tools like `view_text_artifact`, the Task Store is checked first.
-
-### How should the client agent handle files?
-
-- Remote agents can send abitrary files such as text, documents, presentations, spreadsheets, audio, images, videos, etc.
-The files might be Base64 encoded or sent as a downloadable URL.
-
-This package introduces `FileStore`, an abstract class similar to the `TaskStore`,  and `LocalFileStore`, an implementation of `FileStore` that saves files locally.
-It is out of this package's scope to implement tools to interact with them as A2A supports sending every type of file.
-However, if the client agent has access to Bash commands and the files are saved locally, it should be straightforward for it to interact with them.
-
-### How should the client agent handle Tasks that take a long time to complete?
-
-- The default HTTP timeout is 5 seconds.
-Remote agents often take longer than this to send a response, causing `send_message` to timeout.
-It's also not good practice to set a long timeouts (e.g. more than 1 minute).
-Some agents return a Task in a non-terminal state (e.g. `working`) immediately and continue processing in the background.
-
-This package sets a default `send_message` timeout of 60 seconds (configurable via `send_message_timeout`).
-It also introduces `get_task`, a more advanced version of the A2A SDK's `get_task` which monitors a Task until it reaches a terminal state (`completed`, `canceled`, `failed`, `rejected`) or an actionable state (`input_required`, `auth_required`).
-`get_task` uses SSE resubscription for real-time updates; otherwise it polls at a configurable interval (default 5 seconds).
-Both the timeout (default 60 seconds) and poll interval can be overridden per-call by the client agent.
+| Design Question | Considerations | Approach |
+|---|---|---|
+| How should a remote agent's identity be represented to the client agent? | Agent name can't be used because two remote agents might have the same name. Agent Card URL can't be used because authentication headers sent to the agent (e.g. `X-API-Key`) might change the agent. Authentication headers can't be exposed to the agent for security reasons. | `AgentManager` and agent IDs store an Agent Card URL and custom headers. The client agent can use the agent ID to send messages to the remote agent without exposing the Agent Card URL or authentication headers to it. |
+| How should a remote agent's capabilities be represented to the client agent? | The agent's name, description, skill names, and skill descriptions are useful to the client agent. However, showing everything at once to the client agent could overload the context. The client agent should be able to view the remote agents in more depth if they need to. | `AgentManager` and `get_agents_for_llm` returns a summary of the agents at different detail levels. The client agent can view the remote agent's Agent Card in more detail with the `get_agent_for_llm` method. |
+| What should the client agent be shown from the remote agent's response? | A remote agent returns a Task or Message. A Task is a complicated object containing the Task Status, Artifacts, a history of Task Status updates, metadata, etc. not all of which should be added to the LLM's context window. However, it's necessary to share some elements of the response with the client agent. For example, the context ID is required to continue the conversation, Artifacts are the result of the Task, etc. | `A2ATools` introduces LLM-friendly types that are subsets of A2A types: `TaskForLLM`, `MessageForLLM`, `TaskStatusForLLM`, `ArtifactForLLM`, `TextPartForLLM`, `DataPartForLLM`, and `FilePartForLLM`. `A2ASession` returns A2A types for programmatic use. |
+| How should the client agent handle large Artifacts that would overload the context? | Most LLMs have a context window of 128K tokens (~512K characters). Artifacts can easily exceed this. Even if they don't exceed this, tokens increase cost and degrade LLM output quality. | `A2ATools` automatically minimises Artifacts that are more than `send_message_character_limit` characters when JSON stringified. For text Artifacts the first `send_message_character_limit / 2` characters are shown, followed by `[... X characters omitted ...]`, followed by the last `send_message_character_limit / 2` characters. The LLM can use the `view_text_artifact` method to view the omitted characters. |
+| How should the client agent ensure that it has access to Tasks and Artifacts if the remote agent goes offline or has a retention policy? | Agent conversations can be continued days or weeks after they started. In that time, the remote agent might have gone offline or only keep Tasks and Artifacts for X days. | `A2ASession` and `JSONTaskStore` automatically save Task and Artifact(s) as JSON files. When the client agent uses tools like `view_text_artifact`, the Task Store is checked first. |
+| How should the client agent handle files? | Remote agents can send arbitrary files such as text, documents, presentations, spreadsheets, audio, images, videos, etc. The files might be Base64 encoded or sent as a downloadable URL. | `FileStore`, an abstract class similar to the `TaskStore`, and `LocalFileStore`, an implementation that saves files locally. It is out of this package's scope to implement tools to interact with them as A2A supports sending every type of file. However, if the client agent has access to Bash commands and the files are saved locally, it should be straightforward for it to interact with them. |
+| How should the client agent handle Tasks that take a long time to complete? | The default HTTP timeout is 5 seconds. Remote agents often take longer than this to send a response, causing `send_message` to timeout. It's also not good practice to set long timeouts (e.g. more than 1 minute). Some agents return a Task in a non-terminal state (e.g. `working`) immediately and continue processing in the background. | A default `send_message` timeout of 60 seconds (configurable via `send_message_timeout`). `get_task` monitors a Task until it reaches a terminal state (`completed`, `canceled`, `failed`, `rejected`) or an actionable state (`input_required`, `auth_required`). It uses SSE resubscription for real-time updates; otherwise it polls at a configurable interval (default 5 seconds). Both the timeout and poll interval can be overridden per-call. |
 
 ## 📖 API Reference
 
-### A2ASession
+### A2ATools
 
-Main interface for sending messages to A2A agents and viewing artifacts.
+Ready-made tools for agents to communicate with A2A servers. Every method has LLM-friendly docstrings, returns JSON-serialisable objects, and returns actionable error messages.
 
 ```python
-from pathlib import Path
-from a2a_utils import A2ASession, AgentManager, ArtifactSettings, JSONTaskStore, LocalFileStore
+from a2a_utils import A2ATools, A2ASession, AgentManager
 
-session = A2ASession(
-    agent_manager=AgentManager({
-        "research-bot": {"url": "https://research-bot.example.com/.well-known/agent-card.json"}
-    }),
-    task_store=JSONTaskStore(Path("./storage/tasks")),
-    file_store=LocalFileStore(Path("./storage/files")),
-)
+tools = A2ATools(session)
 ```
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `agent_manager` | `AgentManager` | Yes | The agent manager instance |
-| `task_store` | `TaskStore \| None` | No | Task store for persistence (default: `InMemoryTaskStore`) |
-| `file_store` | `FileStore \| None` | No | File store for saving file artifacts (default: `None`) |
+| `session` | `A2ASession` | Yes | The session instance for sending messages and managing agents |
 | `artifact_settings` | `ArtifactSettings \| None` | No | Minimization/view settings (default: `ArtifactSettings()`) |
-| `send_message_timeout` | `float` | No | HTTP timeout in seconds for `send_message` (default: `60.0`) |
-| `get_task_timeout` | `float` | No | Total monitoring timeout in seconds for `get_task`. Also used as the HTTP timeout for artifact retrieval in `view_text_artifact`/`view_data_artifact` (default: `60.0`) |
-| `get_task_poll_interval` | `float` | No | Interval in seconds between `get_task` polls (default: `5.0`) |
-
-`file_store` determines what `FilePartForLLM` shows:
-
-| FileStore | Source | `uri` | `bytes` |
-|---|---|---|---|
-| configured | `FileWithBytes` | `None` | `{"_saved_to": ["/storage/task-123/art-789/report.pdf"]}` |
-| configured | `FileWithUri` | `{"_saved_to": ["/storage/task-123/art-789/chart.png"]}` | `None` |
-| not configured | `FileWithBytes` | `None` | `{"_error": "No FileStore configured. Cannot access file bytes."}` |
-| not configured | `FileWithUri` | `"https://cdn.example.com/chart.png"` | `None` |
 
 `artifact_settings` determines how Artifacts are minimized and viewed:
 
@@ -184,6 +110,7 @@ settings = ArtifactSettings(
     minimized_object_string_length=10_000,
     view_artifact_character_limit=100_000,
 )
+tools = A2ATools(session, artifact_settings=settings)
 ```
 
 | Field | Type | Default | Description |
@@ -192,27 +119,75 @@ settings = ArtifactSettings(
 | `minimized_object_string_length` | `int` | `5,000` | Max length for individual string values within minimized data objects |
 | `view_artifact_character_limit` | `int` | `50,000` | Character limit for output from `view_text_artifact` / `view_data_artifact` |
 
-#### `async send_message(agent_id: str, message: str, *, context_id: str | None = None, task_id: str | None = None, timeout: float | None = None) -> TaskForLLM | MessageForLLM`
+#### `async get_agents() -> dict[str, Any]`
 
-Send a message to an A2A agent. The returned task is automatically saved to the task store. Artifacts are auto-minimized, and file parts are saved via the file store.
+List all available agents with their names and descriptions.
+
+```python
+result = await tools.get_agents()
+```
+
+Example result:
+
+```json
+{
+  "research-bot": {
+    "name": "Research Bot",
+    "description": "Find and summarize research papers"
+  },
+  "weather": {
+    "name": "Weather Agent",
+    "description": "Get weather forecasts for any location"
+  }
+}
+```
+
+#### `async get_agent(agent_id: str) -> dict[str, Any]`
+
+Get detailed information about a specific agent, including its skills.
+
+```python
+result = await tools.get_agent("research-bot")
+```
+
+Example result:
+
+```json
+{
+  "name": "Research Bot",
+  "description": "Find and summarize research papers",
+  "skills": [
+    {
+      "name": "Search Papers",
+      "description": "Search for papers by topic, author, or keyword"
+    },
+    {
+      "name": "Summarize Paper",
+      "description": "Generate a summary of a specific paper"
+    }
+  ]
+}
+```
+
+#### `async send_message(agent_id, message, context_id?, task_id?, timeout?) -> dict[str, Any]`
+
+Send a message to an agent and receive a structured response. The response includes the agent's reply and any generated Artifacts. Artifacts are automatically minimized to fit the context window.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `agent_id` | `str` | Yes | Registered agent identifier |
+| `agent_id` | `str` | Yes | ID of the agent to message (from get_agents) |
 | `message` | `str` | Yes | The message content to send |
-| `context_id` | `str \| None` | No | Context ID to continue a conversation (auto-generated when None) |
-| `task_id` | `str \| None` | No | Task ID to attach to the message |
-| `timeout` | `float \| None` | No | Override HTTP timeout in seconds (default: `send_message_timeout`) |
+| `context_id` | `str \| None` | No | Continue an existing conversation by providing its context ID |
+| `task_id` | `str \| None` | No | Attach to an existing task (for input_required flows) |
+| `timeout` | `float \| None` | No | Override the default timeout in seconds |
 
 ```python
-from a2a_utils import TaskForLLM, MessageForLLM
-
-response = await session.send_message(
+result = await tools.send_message(
     "research-bot", "Find recent papers on quantum computing"
 )
 ```
 
-Example result (TaskForLLM):
+Example result:
 
 ```json
 {
@@ -269,69 +244,44 @@ Example result (TaskForLLM):
 Continue the conversation using `context_id`:
 
 ```python
-response_2 = await session.send_message(
+result_2 = await tools.send_message(
     "research-bot",
     "Summarize the most recent result",
-    context_id=response.context_id,
+    context_id="ctx-456",
 )
 ```
 
-**Returns:** [`TaskForLLM`](#taskforllm) | [`MessageForLLM`](#messageforllm)
+#### `async get_task(agent_id, task_id, timeout?, poll_interval?) -> dict[str, Any]`
 
-#### `async get_task(agent_id: str, task_id: str, *, timeout: float | None = None, poll_interval: float | None = None) -> TaskForLLM`
-
-Get the current state of a task. Monitors until a terminal state (`completed`, `canceled`, `failed`, `rejected`) or actionable state (`input_required`, `auth_required`) is reached, or until timeout. Uses SSE resubscription if the agent supports streaming, otherwise polls at regular intervals.
-
-On monitoring timeout, returns the current task state (which may still be non-terminal, e.g. `working`). The only errors from `get_task` are failed HTTP requests (agent down, network error).
+Check the progress of a task that is still in progress. Use this after `send_message` returns a task in a non-terminal state (e.g. `"working"`).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `agent_id` | `str` | Yes | Registered agent identifier |
-| `task_id` | `str` | Yes | Task ID from a previous `send_message` call |
-| `timeout` | `float \| None` | No | Override monitoring timeout in seconds (default: `get_task_timeout`) |
-| `poll_interval` | `float \| None` | No | Override interval between polls in seconds (default: `get_task_poll_interval`) |
+| `agent_id` | `str` | Yes | ID of the agent that owns the task |
+| `task_id` | `str` | Yes | Task ID from a previous send_message response |
+| `timeout` | `float \| None` | No | Override the monitoring timeout in seconds |
+| `poll_interval` | `float \| None` | No | Override the interval between status checks in seconds |
 
 ```python
-result = await session.get_task("research-bot", "task-123")
+result = await tools.get_task("research-bot", "task-123")
 ```
 
-Example result:
+#### `async view_text_artifact(agent_id, task_id, artifact_id, line_start?, line_end?, character_start?, character_end?) -> dict[str, Any]`
 
-```json
-{
-    "id": "task-123",
-    "context_id": "ctx-456",
-    "kind": "task",
-    "status": {
-        "state": "completed",
-        "message": {
-            "context_id": "ctx-456",
-            "kind": "message",
-            "parts": [{"kind": "text", "text": "Processing complete."}]
-        }
-    },
-    "artifacts": []
-}
-```
-
-**Returns:** [`TaskForLLM`](#taskforllm)
-
-#### `async view_text_artifact(agent_id, task_id, artifact_id, *, line_start=None, line_end=None, character_start=None, character_end=None) -> ArtifactForLLM`
-
-View text content from an artifact with optional line or character range. Line selection (1-based, inclusive) and character selection (0-based, Python slice semantics) are mutually exclusive.
+View text content from an artifact, optionally selecting a range. Use this for artifacts containing text (documents, logs, code, etc.).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `agent_id` | `str` | Yes | Agent ID for remote artifact retrieval |
-| `task_id` | `str` | Yes | The task containing the artifact |
-| `artifact_id` | `str` | Yes | The artifact identifier |
+| `agent_id` | `str` | Yes | ID of the agent that produced the artifact |
+| `task_id` | `str` | Yes | Task ID containing the artifact |
+| `artifact_id` | `str` | Yes | The artifact's unique identifier |
 | `line_start` | `int \| None` | No | Starting line number (1-based, inclusive) |
 | `line_end` | `int \| None` | No | Ending line number (1-based, inclusive) |
 | `character_start` | `int \| None` | No | Starting character index (0-based, inclusive) |
 | `character_end` | `int \| None` | No | Ending character index (0-based, exclusive) |
 
 ```python
-result = await session.view_text_artifact(
+result = await tools.view_text_artifact(
     "research-bot", "task-123", "art-790", line_start=1, line_end=3
 )
 ```
@@ -352,25 +302,23 @@ Example result:
 }
 ```
 
-**Returns:** [`ArtifactForLLM`](#artifactforllm)
+#### `async view_data_artifact(agent_id, task_id, artifact_id, json_path?, rows?, columns?) -> dict[str, Any]`
 
-#### `async view_data_artifact(agent_id: str, task_id: str, artifact_id: str, *, json_path: str | None = None, rows: int | list[int] | str | None = None, columns: str | list[str] | None = None) -> ArtifactForLLM`
-
-View structured data from an artifact with optional filtering.
+View structured data from an artifact with optional filtering. Use this for artifacts containing JSON data (objects, arrays, tables).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `agent_id` | `str` | Yes | Agent ID for remote artifact retrieval |
-| `task_id` | `str` | Yes | The task containing the artifact |
-| `artifact_id` | `str` | Yes | The artifact identifier |
-| `json_path` | `str \| None` | No | Dot-separated path to extract specific fields |
-| `rows` | `int \| list[int] \| str \| None` | No | Row selection (e.g. `"0-10"`, `[0, 5, 9]`, `"all"`) |
-| `columns` | `str \| list[str] \| None` | No | Column selection (e.g. `["name", "age"]`, `"all"`) |
+| `agent_id` | `str` | Yes | ID of the agent that produced the artifact |
+| `task_id` | `str` | Yes | Task ID containing the artifact |
+| `artifact_id` | `str` | Yes | The artifact's unique identifier |
+| `json_path` | `str \| None` | No | Dot-separated path to navigate into the data (e.g. `"results.items"`) |
+| `rows` | `str \| None` | No | Row selection: `"0"`, `"0-10"`, `"0,2,5"`, `"all"` |
+| `columns` | `str \| None` | No | Column selection: `"name"`, `"name,age"`, `"all"` |
 
 ```python
-result = await session.view_data_artifact(
+result = await tools.view_data_artifact(
     "research-bot", "task-123", "art-789",
-    rows="0-1", columns=["title", "year"],
+    rows="0-1", columns="title,year",
 )
 ```
 
@@ -393,9 +341,84 @@ Example result:
 }
 ```
 
-**Returns:** [`ArtifactForLLM`](#artifactforllm)
+### A2ASession
 
-### 🤖 AgentManager
+Programmatic interface for sending messages to A2A agents. Returns full A2A SDK types (`Task`, `Message`) for direct use.
+
+```python
+from pathlib import Path
+from a2a_utils import A2ASession, AgentManager, JSONTaskStore, LocalFileStore
+
+session = A2ASession(
+    agent_manager=AgentManager({
+        "research-bot": {"url": "https://research-bot.example.com/.well-known/agent-card.json"}
+    }),
+    task_store=JSONTaskStore(Path("./storage/tasks")),
+    file_store=LocalFileStore(Path("./storage/files")),
+)
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `agent_manager` | `AgentManager` | Yes | The agent manager instance |
+| `task_store` | `TaskStore \| None` | No | Task store for persistence (default: `InMemoryTaskStore`) |
+| `file_store` | `FileStore \| None` | No | File store for saving file artifacts (default: `None`) |
+| `send_message_timeout` | `float` | No | HTTP timeout in seconds for `send_message` (default: `60.0`) |
+| `get_task_timeout` | `float` | No | Total monitoring timeout in seconds for `get_task` (default: `60.0`) |
+| `get_task_poll_interval` | `float` | No | Interval in seconds between `get_task` polls (default: `5.0`) |
+
+#### `async send_message(agent_id: str, message: str, *, context_id: str | None = None, task_id: str | None = None, timeout: float | None = None) -> Task | Message`
+
+Send a message to an A2A agent. The returned task is automatically saved to the task store. File artifacts are saved via the file store.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `agent_id` | `str` | Yes | Registered agent identifier |
+| `message` | `str` | Yes | The message content to send |
+| `context_id` | `str \| None` | No | Context ID to continue a conversation (auto-generated when None) |
+| `task_id` | `str \| None` | No | Task ID to attach to the message |
+| `timeout` | `float \| None` | No | Override HTTP timeout in seconds (default: `send_message_timeout`) |
+
+```python
+from a2a.types import Task, Message
+
+response = await session.send_message(
+    "research-bot", "Find recent papers on quantum computing"
+)
+```
+
+Continue the conversation using `context_id`:
+
+```python
+response_2 = await session.send_message(
+    "research-bot",
+    "Summarize the most recent result",
+    context_id=response.context_id,
+)
+```
+
+**Returns:** `Task | Message` (from `a2a.types`)
+
+#### `async get_task(agent_id: str, task_id: str, *, timeout: float | None = None, poll_interval: float | None = None) -> Task`
+
+Get the current state of a task. Monitors until a terminal state (`completed`, `canceled`, `failed`, `rejected`) or actionable state (`input_required`, `auth_required`) is reached, or until timeout. Uses SSE resubscription if the agent supports streaming, otherwise polls at regular intervals.
+
+On monitoring timeout, returns the current task state (which may still be non-terminal, e.g. `working`). The only errors from `get_task` are failed HTTP requests (agent down, network error).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `agent_id` | `str` | Yes | Registered agent identifier |
+| `task_id` | `str` | Yes | Task ID from a previous `send_message` call |
+| `timeout` | `float \| None` | No | Override monitoring timeout in seconds (default: `get_task_timeout`) |
+| `poll_interval` | `float \| None` | No | Override interval between polls in seconds (default: `get_task_poll_interval`) |
+
+```python
+task = await session.get_task("research-bot", "task-123")
+```
+
+**Returns:** `Task` (from `a2a.types`)
+
+### AgentManager
 
 Manages A2A agent cards keyed by user-defined agent IDs.
 
@@ -620,41 +643,6 @@ summary = await manager.get_agent_for_llm("language-translator")
 }
 ```
 
-#### `async get_agent_card_from_url(url: str, detail: str = "basic") -> dict[str, Any]`
-
-Fetch and format an agent card from a URL without registering it. Use this to preview an agent before adding it with `add_agent`.
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `url` | `str` | Yes | Full Agent Card URL |
-| `detail` | `str` | No | Detail level: `"name"`, `"basic"` (default), `"skills"`, or `"full"` |
-
-**Returns:** `dict[str, Any]`
-
-```python
-card = await manager.get_agent_card_from_url(
-    "https://example.com/.well-known/agent-card.json",
-    detail="full",
-)
-```
-
-```json
-{
-  "name": "Universal Translator",
-  "description": "Translate text and audio between 50+ languages",
-  "skills": [
-    {
-      "name": "Translate Text",
-      "description": "Translate text between any supported language pair"
-    },
-    {
-      "name": "Translate Audio",
-      "description": "Translate audio between any supported language pair"
-    }
-  ]
-}
-```
-
 #### `async add_agent(agent_id: str, url: str, custom_headers: dict[str, str] | None = None) -> None`
 
 Register a new agent at runtime.
@@ -775,7 +763,7 @@ await file_store.delete("task-123", "art-789")
 
 ### 🎨 Artifacts
 
-The `A2ASession` uses the `TextArtifacts` and `DataArtifacts` classes to automatically minimize Artifacts that are returned from `send_message` and view Artifacts using `view_text_artifact` and `view_data_artifact`. They can also be used independently on raw data.
+`A2ATools` uses the `TextArtifacts` and `DataArtifacts` classes to automatically minimize Artifacts returned from `send_message` and view Artifacts using `view_text_artifact` and `view_data_artifact`. They can also be used independently on raw data.
 
 #### TextArtifacts
 
@@ -1135,7 +1123,7 @@ DataArtifacts.summarize_values(salaries)
 
 #### `minimize_artifacts(artifacts, *, character_limit=50_000, minimized_object_string_length=5_000, saved_file_paths=None, text_tip=None, data_tip=None) -> list[ArtifactForLLM]`
 
-Minimize a list of artifacts for LLM display. Called automatically by `send_message`. Combines all TextParts within each artifact into a single [`TextPartForLLM`](#textpartforllm). Handles `FilePart`s by including file metadata and saved paths.
+Minimize a list of artifacts for LLM display. Called automatically by `A2ATools.send_message`. Combines all TextParts within each artifact into a single [`TextPartForLLM`](#textpartforllm). Handles `FilePart`s by including file metadata and saved paths.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -1291,7 +1279,7 @@ AgentURLAndCustomHeaders(
 
 #### `TaskForLLM`
 
-Returned by `A2ASession.send_message()` for task responses.
+Returned by `A2ATools.send_message()` for task responses.
 
 ```python
 TaskForLLM(
@@ -1361,7 +1349,7 @@ TaskForLLM(
 
 #### `MessageForLLM`
 
-Returned by `A2ASession.send_message()` for message-only responses, or as `TaskStatusForLLM.message`.
+Returned by `A2ATools.send_message()` for message-only responses, or as `TaskStatusForLLM.message`.
 
 ```python
 MessageForLLM(

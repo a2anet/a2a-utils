@@ -3,7 +3,7 @@
 import asyncio
 import time
 import uuid
-from typing import Any, Union
+from typing import Any
 
 import httpx
 from a2a.client import A2AClient
@@ -11,8 +11,6 @@ from a2a.client.errors import A2AClientJSONRPCError
 from a2a.server.tasks import InMemoryTaskStore, TaskStore
 from a2a.types import (
     AgentCard,
-    Artifact,
-    DataPart,
     FilePart,
     GetTaskRequest,
     GetTaskSuccessResponse,
@@ -24,40 +22,23 @@ from a2a.types import (
     Role,
     SendMessageRequest,
     SendMessageSuccessResponse,
-    SendStreamingMessageResponse,
     SendStreamingMessageSuccessResponse,
     Task,
-    TaskArtifactUpdateEvent,
     TaskIdParams,
     TaskQueryParams,
     TaskResubscriptionRequest,
-    TaskState,
     TaskStatusUpdateEvent,
     TextPart,
 )
 from loguru import logger
 
-from ..artifacts import DataArtifacts, TextArtifacts, minimize_artifacts
 from ..files import FileStore
-from ..types import (
-    TERMINAL_OR_ACTIONABLE_STATES,
-    ArtifactForLLM,
-    ArtifactSettings,
-    DataPartForLLM,
-    FilePartForLLM,
-    MessageForLLM,
-    TaskForLLM,
-    TaskStatusForLLM,
-    TextPartForLLM,
-)
+from ..types import TERMINAL_OR_ACTIONABLE_STATES
 from .agent_manager import AgentManager
-
-TEXT_MINIMIZED_TIP = "Text was minimized. Call view_text_artifact() to view specific line ranges."
-DATA_MINIMIZED_TIP = "Data was minimized. Call view_data_artifact() to navigate to specific data."
 
 
 class A2ASession:
-    """Main interface for sending messages to A2A agents and viewing artifacts."""
+    """Main interface for sending messages to A2A agents."""
 
     def __init__(
         self,
@@ -65,15 +46,13 @@ class A2ASession:
         *,
         task_store: TaskStore | None = None,
         file_store: FileStore | None = None,
-        artifact_settings: ArtifactSettings | None = None,
         send_message_timeout: float = 60.0,
         get_task_timeout: float = 60.0,
         get_task_poll_interval: float = 5.0,
     ) -> None:
         self.agent_manager = agent_manager
         self.task_store: TaskStore = task_store or InMemoryTaskStore()
-        self._file_store = file_store
-        self._artifact_settings = artifact_settings or ArtifactSettings()
+        self.file_store: FileStore | None = file_store
         self._send_message_timeout = send_message_timeout
         self._get_task_timeout = get_task_timeout
         self._get_task_poll_interval = get_task_poll_interval
@@ -86,7 +65,7 @@ class A2ASession:
         context_id: str | None = None,
         task_id: str | None = None,
         timeout: float | None = None,
-    ) -> TaskForLLM | MessageForLLM:
+    ) -> Task | Message:
         """Send a message to an A2A agent.
 
         Args:
@@ -99,7 +78,7 @@ class A2ASession:
                 from ``__init__``.
 
         Returns:
-            TaskForLLM for task responses, MessageForLLM for message-only responses.
+            Task for task responses, Message for message-only responses.
 
         Raises:
             ValueError: If agent is not found.
@@ -154,7 +133,7 @@ class A2ASession:
 
         # Handle Message result
         if isinstance(result, Message):
-            return await self._build_message_for_llm(result)
+            return result
 
         # Handle Task result
         if not isinstance(result, Task):
@@ -163,9 +142,10 @@ class A2ASession:
         task = result
         await self.task_store.save(task)
 
-        # If task is already in a terminal/actionable state, return immediately
+        # If task is already in a terminal/actionable state, save files and return
         if task.status.state in TERMINAL_OR_ACTIONABLE_STATES:
-            return await self._build_task_for_llm(task)
+            await self._save_files(task)
+            return task
 
         # Task is in a non-terminal state (e.g. working) — monitor with remaining time
         elapsed = time.monotonic() - start
@@ -184,77 +164,8 @@ class A2ASession:
                 )
             await self.task_store.save(task)
 
-        return await self._build_task_for_llm(task)
-
-    async def _build_message_for_llm(self, message: Message) -> MessageForLLM:
-        """Convert an A2A Message to MessageForLLM.
-
-        Combines all TextParts into a single TextPartForLLM.
-        FileParts are ignored; file handling is done at the artifact level.
-        """
-        parts: list[TextPartForLLM | DataPartForLLM | FilePartForLLM] = []
-
-        # Combine all text parts
-        text_segments: list[str] = []
-        for part in message.parts:
-            if isinstance(part.root, TextPart):
-                text_segments.append(part.root.text)
-
-        if text_segments:
-            parts.append(TextPartForLLM(kind="text", text="".join(text_segments)))
-
-        # Each data part stays separate
-        for part in message.parts:
-            if isinstance(part.root, DataPart):
-                parts.append(DataPartForLLM(kind="data", data=part.root.data))
-
-        return MessageForLLM(
-            context_id=message.context_id,
-            kind="message",
-            parts=parts,
-        )
-
-    async def _build_task_for_llm(self, task: Task) -> TaskForLLM:
-        """Convert a Task to TaskForLLM with artifact minimization and file saving."""
-        # Save files if file_store is configured
-        saved_file_paths: dict[str, list[str]] | None = None
-        if self._file_store is not None and task.artifacts:
-            saved_file_paths = {}
-            for artifact in task.artifacts:
-                has_files = any(isinstance(p.root, FilePart) for p in artifact.parts)
-                if has_files:
-                    paths = await self._file_store.save(task.id, artifact)
-                    if paths:
-                        saved_file_paths[artifact.artifact_id] = paths
-
-        minimized = (
-            minimize_artifacts(
-                task.artifacts,
-                character_limit=self._artifact_settings.send_message_character_limit,
-                minimized_object_string_length=self._artifact_settings.minimized_object_string_length,
-                saved_file_paths=saved_file_paths,
-                text_tip=TEXT_MINIMIZED_TIP,
-                data_tip=DATA_MINIMIZED_TIP,
-            )
-            if task.artifacts
-            else []
-        )
-
-        # Build status message
-        status_message: MessageForLLM | None = None
-        if task.status.message:
-            status_message = await self._build_message_for_llm(task.status.message)
-
-        return TaskForLLM(
-            id=task.id,
-            context_id=task.context_id,
-            kind="task",
-            status=TaskStatusForLLM(
-                state=task.status.state,
-                message=status_message,
-            ),
-            artifacts=minimized,
-        )
+        await self._save_files(task)
+        return task
 
     async def get_task(
         self,
@@ -263,7 +174,7 @@ class A2ASession:
         *,
         timeout: float | None = None,
         poll_interval: float | None = None,
-    ) -> TaskForLLM:
+    ) -> Task:
         """Get the current state of a task, monitoring until terminal/actionable state.
 
         If the remote agent supports streaming, uses SSE resubscription for real-time
@@ -283,7 +194,7 @@ class A2ASession:
                 ``__init__``.
 
         Returns:
-            TaskForLLM with the current task state. If monitoring times out, the
+            Task with the current task state. If monitoring times out, the
             returned task may still be in a non-terminal state.
 
         Raises:
@@ -307,7 +218,23 @@ class A2ASession:
             )
 
         await self.task_store.save(task)
-        return await self._build_task_for_llm(task)
+        await self._save_files(task)
+        return task
+
+    async def _save_files(self, task: Task) -> None:
+        """Save file artifacts to the file store if configured.
+
+        Idempotent: skips artifacts whose files have already been saved.
+        """
+        if self.file_store is None or not task.artifacts:
+            return
+
+        for artifact in task.artifacts:
+            has_files = any(isinstance(p.root, FilePart) for p in artifact.parts)
+            if has_files:
+                existing = await self.file_store.get(task.id, artifact.artifact_id)
+                if not existing:
+                    await self.file_store.save(task.id, artifact)
 
     async def _get_task_streaming(
         self,
@@ -329,7 +256,6 @@ class A2ASession:
                 params=TaskIdParams(id=task_id),
             )
 
-            reached_terminal = False
             try:
                 async with asyncio.timeout(timeout):
                     async for sse_response in client.resubscribe(
@@ -345,11 +271,9 @@ class A2ASession:
                         result = actual.result
                         if isinstance(result, TaskStatusUpdateEvent):
                             if result.status.state in TERMINAL_OR_ACTIONABLE_STATES:
-                                reached_terminal = True
                                 break
                         elif isinstance(result, Task):
                             if result.status.state in TERMINAL_OR_ACTIONABLE_STATES:
-                                reached_terminal = True
                                 break
             except TimeoutError:
                 logger.info(f"Task {task_id} still in working state after {timeout}s")
@@ -415,133 +339,6 @@ class A2ASession:
 
         return result
 
-    async def view_text_artifact(
-        self,
-        agent_id: str,
-        task_id: str,
-        artifact_id: str,
-        *,
-        line_start: int | None = None,
-        line_end: int | None = None,
-        character_start: int | None = None,
-        character_end: int | None = None,
-    ) -> ArtifactForLLM:
-        """View text content from an artifact with optional line or character range.
-
-        Args:
-            agent_id: Agent ID for remote artifact retrieval.
-            task_id: The task containing the artifact.
-            artifact_id: The artifact identifier.
-            line_start: Starting line number (1-based, inclusive).
-            line_end: Ending line number (1-based, inclusive).
-            character_start: Starting character index (0-based, inclusive).
-            character_end: Ending character index (0-based, exclusive).
-
-        Returns:
-            ArtifactForLLM with text content in parts.
-
-        Raises:
-            ValueError: If artifact is not found or does not contain text.
-        """
-        artifact = await self._get_artifact(agent_id, task_id, artifact_id)
-        text = self._extract_text(artifact)
-        filtered = TextArtifacts.view(
-            text,
-            line_start=line_start,
-            line_end=line_end,
-            character_start=character_start,
-            character_end=character_end,
-            character_limit=self._artifact_settings.view_artifact_character_limit,
-        )
-        return ArtifactForLLM(
-            artifact_id=artifact.artifact_id,
-            description=artifact.description,
-            name=artifact.name,
-            parts=[TextPartForLLM(kind="text", text=filtered)],
-        )
-
-    async def view_data_artifact(
-        self,
-        agent_id: str,
-        task_id: str,
-        artifact_id: str,
-        *,
-        json_path: str | None = None,
-        rows: Union[int, list[int], str, None] = None,
-        columns: Union[str, list[str], None] = None,
-    ) -> ArtifactForLLM:
-        """View structured data from an artifact with optional filtering.
-
-        Args:
-            agent_id: Agent ID for remote artifact retrieval.
-            task_id: The task containing the artifact.
-            artifact_id: The artifact identifier.
-            json_path: Dot-separated path to extract specific fields.
-            rows: Row selection.
-            columns: Column selection.
-
-        Returns:
-            ArtifactForLLM with data content in parts.
-
-        Raises:
-            ValueError: If artifact is not found or does not contain data.
-        """
-        artifact = await self._get_artifact(agent_id, task_id, artifact_id)
-        data = self._extract_data(artifact)
-        filtered = DataArtifacts.view(
-            data,
-            json_path=json_path,
-            rows=rows,
-            columns=columns,
-            character_limit=self._artifact_settings.view_artifact_character_limit,
-        )
-        return ArtifactForLLM(
-            artifact_id=artifact.artifact_id,
-            description=artifact.description,
-            name=artifact.name,
-            parts=[DataPartForLLM(kind="data", data=filtered)],
-        )
-
-    # -- Private helpers --
-
-    @staticmethod
-    def _extract_text(artifact: Artifact) -> str:
-        """Extract text content from artifact parts.
-
-        Raises:
-            ValueError: If artifact does not contain text content.
-        """
-        text_parts = []
-        for part in artifact.parts:
-            if isinstance(part.root, TextPart):
-                text_parts.append(part.root.text)
-        if not text_parts:
-            part_types = {type(p.root).__name__ for p in artifact.parts}
-            raise ValueError(
-                f"Artifact '{artifact.artifact_id}' does not contain text content. "
-                f"Found part types: {', '.join(sorted(part_types))}"
-            )
-        return "\n".join(text_parts)
-
-    @staticmethod
-    def _extract_data(artifact: Artifact) -> Any:
-        """Extract data content from artifact parts.
-
-        Raises:
-            ValueError: If artifact does not contain data content.
-        """
-        data_parts = []
-        for part in artifact.parts:
-            if isinstance(part.root, DataPart):
-                data_parts.append(part.root.data)
-        if not data_parts:
-            part_types = {type(p.root).__name__ for p in artifact.parts}
-            raise ValueError(
-                f"Artifact '{artifact.artifact_id}' does not contain data content. "
-                f"Found part types: {', '.join(sorted(part_types))}"
-            )
-        return data_parts[0] if len(data_parts) == 1 else data_parts
-
     async def _resolve_agent(self, agent_id: str) -> tuple[AgentCard, dict[str, str]]:
         """Resolve agent card and headers.
 
@@ -556,60 +353,3 @@ class A2ASession:
             available = ", ".join(sorted(await self.agent_manager.get_agents()))
             raise ValueError(f"Agent '{agent_id}' not found. Available agents: {available}")
         return agent.agent_card, agent.custom_headers
-
-    async def _get_artifact(
-        self,
-        agent_id: str,
-        task_id: str,
-        artifact_id: str,
-    ) -> Artifact:
-        """Look up an artifact through the resolution chain.
-
-        1. Remote retrieval via A2AClient (freshest data)
-        2. Fall back to task_store
-
-        Returns:
-            The Artifact.
-
-        Raises:
-            ValueError: If artifact cannot be found.
-        """
-        # 1. Remote retrieval (freshest data)
-        agent = await self.agent_manager.get_agent(agent_id)
-        if agent is not None:
-            try:
-                async with httpx.AsyncClient(
-                    timeout=httpx.Timeout(self._get_task_timeout)
-                ) as httpx_client:
-                    client = A2AClient(
-                        httpx_client=httpx_client,
-                        agent_card=agent.agent_card,
-                    )
-                    get_request = GetTaskRequest(
-                        id=str(uuid.uuid4()),
-                        params=TaskQueryParams(id=task_id),
-                    )
-                    response = await client.get_task(request=get_request)
-                    actual = response.root if hasattr(response, "root") else response
-                    if isinstance(actual, GetTaskSuccessResponse):
-                        result = actual.result
-                        if isinstance(result, Task):
-                            await self.task_store.save(result)
-                            if result.artifacts:
-                                for artifact in result.artifacts:
-                                    if artifact.artifact_id == artifact_id:
-                                        return artifact
-            except Exception as e:
-                logger.debug(f"Remote artifact retrieval failed: {e}")
-
-        # 2. Fall back to task store
-        task = await self.task_store.get(task_id)
-        if task is not None and task.artifacts:
-            for artifact in task.artifacts:
-                if artifact.artifact_id == artifact_id:
-                    return artifact
-
-        raise ValueError(
-            f"Artifact '{artifact_id}' not found in task '{task_id}'. "
-            "The artifact may have expired or the task_id may be incorrect."
-        )

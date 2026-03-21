@@ -219,30 +219,6 @@ class AgentManager:
             return None
         return self._format_agent_for_llm(agent.agent_card, detail)
 
-    async def get_agent_card_from_url(
-        self,
-        url: str,
-        detail: Literal["name", "basic", "skills", "full"] = "basic",
-    ) -> dict[str, Any]:
-        """Fetch and format an agent card from a URL without registering it.
-
-        Args:
-            url: Full Agent Card URL.
-            detail: Detail level — "name", "basic" (default), "skills", or "full".
-
-        Returns:
-            Formatted agent card summary dict.
-        """
-        base_url, card_path = self._parse_agent_card_url(url)
-        async with httpx.AsyncClient(timeout=httpx.Timeout(self._timeout)) as httpx_client:
-            resolver = A2ACardResolver(
-                httpx_client=httpx_client,
-                base_url=base_url,
-                agent_card_path=card_path,
-            )
-            card = await resolver.get_agent_card()
-        return self._format_agent_for_llm(card, detail)
-
     async def get_agents_for_llm(
         self, detail: Literal["name", "basic", "skills", "full"] = "basic"
     ) -> dict[str, dict[str, Any]]:

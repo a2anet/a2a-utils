@@ -4,6 +4,7 @@
 from a2a_utils.__about__ import __version__
 
 from a2a_utils.client.a2a_session import A2ASession
+from a2a_utils.client.a2a_tools import A2ATools
 from a2a_utils.client.agent_manager import AgentManager
 from a2a_utils.artifacts import (
     DataArtifacts,
@@ -29,6 +30,7 @@ __all__ = [
     "__version__",
     # core
     "A2ASession",
+    "A2ATools",
     "AgentManager",
     "JSONTaskStore",
     # artifacts
