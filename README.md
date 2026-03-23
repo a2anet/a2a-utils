@@ -226,6 +226,7 @@ a2a-utils/
 │       ├── ci-python.yml          # Python: lint, typecheck, test (path-filtered)
 │       ├── ci-javascript.yml      # JavaScript: lint, typecheck, test (path-filtered)
 │       └── release-please.yml     # Unified releases + PyPI & npm publishing
+├── CROSS_REFERENCE.md             # Shared Python ↔ JavaScript parity notes
 ├── python/
 │   ├── src/
 │   │   └── a2a_utils/

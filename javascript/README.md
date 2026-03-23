@@ -24,9 +24,7 @@ The tools are based on [Writing effective tools for AI agents](https://www.anthr
 Tool outputs are also optimised for LLMs.
 For example, `getAgents` returns a list of agent names and descriptions, whereas `getAgent` also returns an agent's skill names and descriptions.
 `sendMessage` and `getTask` return LLM-friendly types that are subsets of A2A types (e.g. `TaskForLLM`, `MessageForLLM`, and `ArtifactForLLM`) and automatically minimise large Artifacts, which can be viewed with `viewTextArtifact` and `viewDataArtifact`.
-These LLM-facing objects use camelCase field names to match the JavaScript A2A SDK, while artifact metadata keys such as `_total_lines` and `_tip` remain snake_case.
-
-## Installation
+## 📦 Installation
 
 To install with npm:
 
@@ -40,7 +38,7 @@ To install with bun:
 bun add @a2anet/a2a-utils
 ```
 
-## Quick Start
+## 🚀 Quick Start
 
 Create an `A2ASession`, then `A2ATools` to get LLM-friendly tools that can be used out-of-the-box with agent frameworks.
 
@@ -61,9 +59,11 @@ const a2aSession = new A2ASession(agentManager, {
 });
 
 const a2aTools = new A2ATools(a2aSession);
+
+// Pass a2aTools into your agent framework of choice.
 ```
 
-## Design Decisions
+## 💡 Design Decisions
 
 | Design Question | Considerations | Approach |
 |---|---|---|
@@ -75,7 +75,7 @@ const a2aTools = new A2ATools(a2aSession);
 | How should the client agent handle files? | Remote agents can send arbitrary files such as text, documents, presentations, spreadsheets, audio, images, videos, etc. The files might be Base64 encoded or sent as a downloadable URL. | `FileStore`, an interface similar to the `TaskStore`, and `LocalFileStore`, an implementation that saves files locally. It is out of this package's scope to implement tools to interact with them as A2A supports sending every type of file. However, if the client agent has access to Bash commands and the files are saved locally, it should be straightforward for it to interact with them. |
 | How should the client agent handle Tasks that take a long time to complete? | The default HTTP timeout is 5 seconds. Remote agents often take longer than this to send a response, causing `sendMessage` to timeout. It's also not good practice to set long timeouts (e.g. more than 1 minute). Some agents return a Task in a non-terminal state (e.g. `working`) immediately and continue processing in the background. | A default `sendMessage` timeout of 60 seconds (configurable via `sendMessageTimeout`). `getTask` monitors a Task until it reaches a terminal state (`completed`, `canceled`, `failed`, `rejected`) or an actionable state (`input-required`, `auth-required`). It uses SSE resubscription for real-time updates; otherwise it polls at a configurable interval (default 5 seconds). Both the timeout and poll interval can be overridden per-call. |
 
-## API Reference
+## 📖 API Reference
 
 ### A2ATools
 
@@ -601,7 +601,7 @@ await manager.addAgent(
 );
 ```
 
-### JSONTaskStore
+### 💾 JSONTaskStore
 
 Persists Task objects as individual JSON files. Implements the A2A SDK `TaskStore` interface.
 
@@ -625,7 +625,7 @@ Returns `undefined` if the task file does not exist.
 
 Delete a task from disk.
 
-### Files
+### 📁 Files
 
 #### FileStore
 
@@ -689,7 +689,7 @@ Delete saved files for an artifact.
 await fileStore.delete("task-123", "art-789");
 ```
 
-### Artifacts
+### 🎨 Artifacts
 
 `A2ATools` uses the `TextArtifacts` and `DataArtifacts` classes to automatically minimize Artifacts returned from `sendMessage` and view Artifacts using `viewTextArtifact` and `viewDataArtifact`. They can also be used independently on raw data.
 
@@ -833,6 +833,89 @@ Minimize data content for display based on type. Automatically selects the best 
 
 Lists of objects are summarized as table summaries (see `summarizeTable`) and lists of values as value summaries (see `summarizeValues`).
 
+```typescript
+import { DataArtifacts } from "@a2anet/a2a-utils";
+
+const data = {
+    title: "Quarterly Report Q4 2025",
+    summary: "x".repeat(10_000),
+    metrics: { revenue: 1_250_000, growth: 12.5 },
+    employees: Array.from({ length: 100 }, (_, i) => ({
+        name: `Employee ${i}`,
+        department: ["Eng", "Marketing", "Design", "Sales"][i % 4],
+        salary: 60_000 + i * 500,
+    })),
+    tags: ["finance", "quarterly", "internal"],
+};
+
+DataArtifacts.minimize(data, { characterLimit: 100, minimizedObjectStringLength: 10 });
+```
+
+```json
+{
+    "data": {
+        "title": "Quarterly ... [14 more chars]",
+        "summary": "xxxxxxxxxx... [9,990 more chars]",
+        "metrics": {
+            "revenue": 1250000,
+            "growth": 12.5
+        },
+        "employees": {
+            "_total_rows": 100,
+            "_columns": [
+                {
+                    "count": 100,
+                    "unique_count": 100,
+                    "types": [{
+                        "name": "string",
+                        "count": 100,
+                        "percentage": 100.0,
+                        "sample_value": "Employee 42",
+                        "length_minimum": 10,
+                        "length_maximum": 11,
+                        "length_average": 10.9,
+                        "length_stdev": 0.3
+                    }],
+                    "name": "name"
+                },
+                {
+                    "count": 100,
+                    "unique_count": 4,
+                    "types": [{
+                        "name": "string",
+                        "count": 100,
+                        "percentage": 100.0,
+                        "sample_value": "Engineering",
+                        "length_minimum": 5,
+                        "length_maximum": 11,
+                        "length_average": 7.75,
+                        "length_stdev": 2.4
+                    }],
+                    "name": "department"
+                },
+                {
+                    "count": 100,
+                    "unique_count": 100,
+                    "types": [{
+                        "name": "int",
+                        "count": 100,
+                        "percentage": 100.0,
+                        "sample_value": 75000,
+                        "minimum": 60000,
+                        "maximum": 109500,
+                        "average": 84750,
+                        "stdev": 14505.75
+                    }],
+                    "name": "salary"
+                }
+            ],
+            "_json_path": "employees"
+        },
+        "tags": ["finance", "quarterly", "internal"]
+    }
+}
+```
+
 ##### `DataArtifacts.summarizeTable(data): Record<string, unknown>[]`
 
 Generate a summary of tabular data (array of objects). Returns one summary object per column with count, unique count, and per-type statistics.
@@ -843,6 +926,74 @@ Generate a summary of tabular data (array of objects). Returns one summary objec
 
 **Returns:** `Record<string, unknown>[]`
 
+```typescript
+import { DataArtifacts } from "@a2anet/a2a-utils";
+
+const data = Array.from({ length: 100 }, (_, i) => ({
+    name: `Employee ${i}`,
+    department: ["Eng", "Marketing", "Design", "Sales"][i % 4],
+    salary: 60_000 + i * 500,
+}));
+
+DataArtifacts.summarizeTable(data);
+```
+
+```json
+[
+    {
+        "count": 100,
+        "unique_count": 100,
+        "types": [
+            {
+                "name": "string",
+                "count": 100,
+                "percentage": 100.0,
+                "sample_value": "Employee 42",
+                "length_minimum": 10,
+                "length_maximum": 11,
+                "length_average": 10.9,
+                "length_stdev": 0.3
+            }
+        ],
+        "name": "name"
+    },
+    {
+        "count": 100,
+        "unique_count": 4,
+        "types": [
+            {
+                "name": "string",
+                "count": 100,
+                "percentage": 100.0,
+                "sample_value": "Engineering",
+                "length_minimum": 5,
+                "length_maximum": 11,
+                "length_average": 7.75,
+                "length_stdev": 2.4
+            }
+        ],
+        "name": "department"
+    },
+    {
+        "count": 100,
+        "unique_count": 100,
+        "types": [
+            {
+                "name": "int",
+                "count": 100,
+                "percentage": 100.0,
+                "sample_value": 75000,
+                "minimum": 60000,
+                "maximum": 109500,
+                "average": 84750,
+                "stdev": 14505.75
+            }
+        ],
+        "name": "salary"
+    }
+]
+```
+
 ##### `DataArtifacts.summarizeValues(values): Record<string, unknown> | unknown[]`
 
 Generate statistics for a list of values (like a single column). Includes count, unique count, and per-type statistics (min/max/avg/stdev for numbers, length stats for strings, etc.). If the summary would be larger than the original values, the original list is returned instead (inflation guard).
@@ -852,6 +1003,43 @@ Generate statistics for a list of values (like a single column). Includes count,
 | `values` | `unknown[]` | Yes | Values to summarize |
 
 **Returns:** `Record<string, unknown> | unknown[]`
+
+```typescript
+import { DataArtifacts } from "@a2anet/a2a-utils";
+
+const salaries = [
+    95000, 72000, 105000, 68000, 88000,
+    // ... ~100 salary values total, with some nulls
+    null, 115000, 92000, null, 78000,
+];
+
+DataArtifacts.summarizeValues(salaries);
+```
+
+```json
+{
+    "count": 100,
+    "unique_count": 87,
+    "types": [
+        {
+            "name": "int",
+            "count": 92,
+            "percentage": 92.0,
+            "sample_value": 95000,
+            "minimum": 45000,
+            "maximum": 185000,
+            "average": 87250.5,
+            "stdev": 28430.12
+        },
+        {
+            "name": "null",
+            "count": 8,
+            "percentage": 8.0,
+            "sample_value": null
+        }
+    ]
+}
+```
 
 #### `minimizeArtifacts(artifacts, opts?): ArtifactForLLM[]`
 
@@ -868,13 +1056,142 @@ Minimize a list of artifacts for LLM display. Called automatically by `A2ATools.
 
 **Returns:** [`ArtifactForLLM`](#artifactforllm)`[]`
 
-### Types
+```typescript
+import type { Artifact } from "@a2a-js/sdk";
+import { minimizeArtifacts } from "@a2anet/a2a-utils";
+
+const artifacts: Artifact[] = [
+    {
+        artifactId: "art-123",
+        description: "Full text of a research paper abstract spanning several pages.",
+        name: "Research Paper Abstract",
+        parts: [{ kind: "text", text: "x".repeat(60_000) }],
+    },
+    {
+        artifactId: "art-456",
+        description: "Company employee directory with names, departments, and salaries.",
+        name: "Employee Directory",
+        parts: [{
+            kind: "data",
+            data: Array.from({ length: 100 }, (_, i) => ({
+                name: `Employee ${i}`,
+                department: ["Eng", "Marketing", "Design", "Sales"][i % 4],
+                salary: 60_000 + i * 500,
+            })),
+        }],
+    },
+    {
+        artifactId: "art-789",
+        description: "Generated quarterly financial report in PDF format.",
+        name: "Quarterly Report",
+        parts: [
+            {
+                kind: "file",
+                file: {
+                    name: "q4-report.pdf",
+                    mimeType: "application/pdf",
+                    bytes: "base64encodeddata...",
+                },
+            },
+        ],
+    },
+];
+
+const minimized = minimizeArtifacts(artifacts, {
+    textTip: "Text was minimized. Call viewTextArtifact() to see specific line ranges.",
+    dataTip: "Data was minimized. Call viewDataArtifact() to navigate to specific data.",
+    savedFilePaths: { "art-789": ["./storage/files/task-123/art-789/q4-report.pdf"] },
+});
+```
+
+Example result:
+
+```json
+[
+    {
+        "artifactId": "art-123",
+        "description": "Full text of a research paper abstract spanning several pages.",
+        "name": "Research Paper Abstract",
+        "parts": [
+            {
+                "kind": "text",
+                "text": "xxxxxxx...\n\n[... 10,000 characters omitted ...]\n\nxxxxxxx..."
+            }
+        ]
+    },
+    {
+        "artifactId": "art-456",
+        "description": "Company employee directory with names, departments, and salaries.",
+        "name": "Employee Directory",
+        "parts": [
+            {
+                "kind": "data",
+                "data": {
+                    "data": {
+                        "_total_rows": 100,
+                        "_columns": ["..."],
+                        "_tip": "Data was minimized. Call viewDataArtifact() to navigate to specific data."
+                    }
+                }
+            }
+        ]
+    },
+    {
+        "artifactId": "art-789",
+        "description": "Generated quarterly financial report in PDF format.",
+        "name": "Quarterly Report",
+        "parts": [
+            {
+                "kind": "file",
+                "name": "q4-report.pdf",
+                "mimeType": "application/pdf",
+                "uri": null,
+                "bytes": {
+                    "_saved_to": ["./storage/files/task-123/art-789/q4-report.pdf"]
+                }
+            }
+        ]
+    }
+]
+```
+
+### 📋 Types
 
 All types are readonly interfaces exported from `@a2anet/a2a-utils`.
 
 #### `AgentURLAndCustomHeaders`
 
 Returned by `AgentManager.getAgent()` and `AgentManager.getAgents()`.
+
+```typescript
+const agent: AgentURLAndCustomHeaders = {
+    agentCard: {
+        name: "Universal Translator",
+        description: "Translate text and audio between 50+ languages",
+        url: "https://translate.example.com",
+        version: "1.0.0",
+        capabilities: { streaming: false, pushNotifications: false },
+        skills: [
+            {
+                id: "translate-text",
+                name: "Translate Text",
+                description: "Translate text between any supported language pair",
+                tags: ["translate", "text", "language"],
+                examples: ["Translate 'hello' to French"],
+            },
+            {
+                id: "translate-audio",
+                name: "Translate Audio",
+                description: "Translate audio between any supported language pair",
+                tags: ["translate", "audio", "language"],
+            },
+        ],
+        defaultInputModes: ["text", "audio/mpeg"],
+        defaultOutputModes: ["text", "audio/mpeg"],
+    },
+    customHeaders: { Authorization: "Bearer tok_123" },
+};
+```
 
 | Field | Type |
 |---|---|
@@ -884,6 +1201,67 @@ Returned by `AgentManager.getAgent()` and `AgentManager.getAgents()`.
 #### `TaskForLLM`
 
 Returned by `A2ATools.sendMessage()` for task responses.
+
+```typescript
+const task: TaskForLLM = {
+    id: "task-123",
+    contextId: "ctx-456",
+    kind: "task",
+    status: {
+        state: "completed",
+        message: {
+            contextId: "ctx-456",
+            kind: "message",
+            parts: [
+                {
+                    kind: "text",
+                    text: "I found three recent papers on quantum computing and retrieved the abstract for the most recent one.",
+                },
+            ],
+        },
+    },
+    artifacts: [
+        {
+            artifactId: "art-789",
+            description: "Search results for quantum computing papers",
+            name: "Search Results",
+            parts: [
+                {
+                    kind: "data",
+                    data: [
+                        {
+                            title: "Quantum Error Correction Advances",
+                            year: 2025,
+                            authors: "Chen et al.",
+                        },
+                        {
+                            title: "Topological Quantum Computing Survey",
+                            year: 2024,
+                            authors: "Nakamura et al.",
+                        },
+                        {
+                            title: "Fault-Tolerant Logical Qubits",
+                            year: 2024,
+                            authors: "Wang et al.",
+                        },
+                    ],
+                },
+            ],
+        },
+        {
+            artifactId: "art-790",
+            description: "Abstract of 'Quantum Error Correction Advances' by Chen et al.",
+            name: "Abstract",
+            parts: [
+                {
+                    kind: "text",
+                    text: "Quantum computing has seen rapid advances in error correction.\nRecent work demonstrates fault-tolerant logical qubits at scale.\nThis paper surveys progress in quantum error correction from 2023-2025.\nWe review surface codes, color codes, and novel hybrid approaches.\nKey results include a 10x reduction in logical error rates.\nThese improvements bring practical quantum computing closer to reality.\nWe also discuss remaining challenges in qubit connectivity.\nFinally, we outline a roadmap for achieving fault-tolerant quantum computation.",
+                },
+            ],
+        },
+    ],
+};
+```
 
 | Field | Type |
 |---|---|
@@ -897,6 +1275,19 @@ Returned by `A2ATools.sendMessage()` for task responses.
 
 Returned by `A2ATools.sendMessage()` for message-only responses, or as `TaskStatusForLLM.message`.
 
+```typescript
+const message: MessageForLLM = {
+    contextId: "ctx-456",
+    kind: "message",
+    parts: [
+        {
+            kind: "text",
+            text: "I found three recent papers on quantum computing and retrieved the abstract for the most recent one.",
+        },
+    ],
+};
+```
+
 | Field | Type |
 |---|---|
 | `contextId` | `string \| null` |
@@ -904,6 +1295,22 @@ Returned by `A2ATools.sendMessage()` for message-only responses, or as `TaskStat
 | `parts` | ([`TextPartForLLM`](#textpartforllm) \| [`DataPartForLLM`](#datapartforllm) \| [`FilePartForLLM`](#filepartforllm))[] |
 
 #### `TaskStatusForLLM`
+
+```typescript
+const taskStatus: TaskStatusForLLM = {
+    state: "completed",
+    message: {
+        contextId: "ctx-456",
+        kind: "message",
+        parts: [
+            {
+                kind: "text",
+                text: "I found three recent papers on quantum computing and retrieved the abstract for the most recent one.",
+            },
+        ],
+    },
+};
+```
 
 | Field | Type |
 |---|---|
@@ -914,6 +1321,20 @@ Returned by `A2ATools.sendMessage()` for message-only responses, or as `TaskStat
 
 Returned by `viewTextArtifact()`, `viewDataArtifact()`, and `minimizeArtifacts()`. Used in `TaskForLLM.artifacts`.
 
+```typescript
+const artifact: ArtifactForLLM = {
+    artifactId: "art-790",
+    description: "Abstract of 'Quantum Error Correction Advances' by Chen et al.",
+    name: "Abstract",
+    parts: [
+        {
+            kind: "text",
+            text: "Quantum computing has seen rapid advances in error correction.\nRecent work demonstrates fault-tolerant logical qubits at scale.\nThis paper surveys progress in quantum error correction from 2023-2025.\nWe review surface codes, color codes, and novel hybrid approaches.\nKey results include a 10x reduction in logical error rates.\nThese improvements bring practical quantum computing closer to reality.\nWe also discuss remaining challenges in qubit connectivity.\nFinally, we outline a roadmap for achieving fault-tolerant quantum computation.",
+        },
+    ],
+};
+```
+
 | Field | Type |
 |---|---|
 | `artifactId` | `string` |
@@ -923,12 +1344,42 @@ Returned by `viewTextArtifact()`, `viewDataArtifact()`, and `minimizeArtifacts()
 
 #### `TextPartForLLM`
 
+```typescript
+const textPart: TextPartForLLM = {
+    kind: "text",
+    text: "Quantum computing has seen rapid advances in error correction.\nRecent work demonstrates fault-tolerant logical qubits at scale.\nThis paper surveys progress in quantum error correction from 2023-2025.",
+};
+```
+
 | Field | Type |
 |---|---|
 | `kind` | `string` (`"text"`) |
 | `text` | `string` |
 
 #### `DataPartForLLM`
+
+```typescript
+const dataPart: DataPartForLLM = {
+    kind: "data",
+    data: [
+        {
+            title: "Quantum Error Correction Advances",
+            year: 2025,
+            authors: "Chen et al.",
+        },
+        {
+            title: "Topological Quantum Computing Survey",
+            year: 2024,
+            authors: "Nakamura et al.",
+        },
+        {
+            title: "Fault-Tolerant Logical Qubits",
+            year: 2024,
+            authors: "Wang et al.",
+        },
+    ],
+};
+```
 
 | Field | Type |
 |---|---|
@@ -939,6 +1390,20 @@ Returned by `viewTextArtifact()`, `viewDataArtifact()`, and `minimizeArtifacts()
 
 Represents a file part in artifacts and messages. `uri` and `bytes` are mutually exclusive — at most one is set.
 
+```typescript
+const filePart: FilePartForLLM = {
+    kind: "file",
+    name: "q4-report.pdf",
+    mimeType: "application/pdf",
+    uri: null,
+    bytes: {
+        _saved_to: [
+            "./storage/files/task-123/art-789/q4-report.pdf",
+        ],
+    },
+};
+```
+
 | Field | Type | Description |
 |---|---|---|
 | `kind` | `string` (`"file"`) | Always `"file"` |
@@ -947,13 +1412,13 @@ Represents a file part in artifacts and messages. `uri` and `bytes` are mutually
 | `uri` | `string \| Record<string, unknown> \| null` | Raw URI (no FileStore) or `{"_saved_to": [...]}` (FileStore saved it) |
 | `bytes` | `Record<string, unknown> \| null` | `{"_saved_to": [...]}` (FileStore saved it) or `{"_error": "..."}` (no FileStore) |
 
-## License
+## 📄 License
 
 `@a2anet/a2a-utils` is distributed under the terms of the [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html) license.
 
-## Join the A2A Net Community
+## 🤝 Join the A2A Net Community
 
 A2A Net is a site to find and share AI agents and open-source community.
 
-- Site: [A2A Net](https://a2anet.com)
-- Discord: [Join the Discord](https://discord.gg/674NGXpAjU)
+- 🌍 Site: [A2A Net](https://a2anet.com)
+- 🤖 Discord: [Join the Discord](https://discord.gg/674NGXpAjU)
