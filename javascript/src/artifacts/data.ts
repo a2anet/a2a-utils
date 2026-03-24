@@ -517,7 +517,10 @@ export class DataArtifacts {
      *
      * @returns List of row indices to include.
      */
-    private static parseRowSelection(rows: number | number[] | string, totalRows: number): number[] {
+    private static parseRowSelection(
+        rows: number | number[] | string,
+        totalRows: number,
+    ): number[] {
         if (typeof rows === "number") {
             let row = rows;
             if (row < 0) {
@@ -603,7 +606,10 @@ export class DataArtifacts {
      *
      * @returns List of column names to include.
      */
-    private static parseColumnSelection(columns: string | string[], availableColumns: string[]): string[] {
+    private static parseColumnSelection(
+        columns: string | string[],
+        availableColumns: string[],
+    ): string[] {
         if (typeof columns === "string") {
             if (columns === "all") {
                 return availableColumns;

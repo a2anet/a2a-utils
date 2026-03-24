@@ -5,6 +5,9 @@
 import { describe, expect, test } from "bun:test";
 import { DataArtifacts } from "../src/artifacts/data.js";
 import { TextArtifacts } from "../src/artifacts/text.js";
+import { getDataArtifactsStatics } from "./internal-access.js";
+
+const dataArtifacts = getDataArtifactsStatics(DataArtifacts);
 
 describe("minimizeText", () => {
     test("short text", () => {
@@ -57,32 +60,32 @@ describe("minimizeText", () => {
 describe("minimizeObject", () => {
     test("small object", () => {
         const obj = { key: "value" };
-        const result = (DataArtifacts as any).minimizeObject(obj);
+        const result = dataArtifacts.minimizeObject(obj);
         expect(result).toEqual({ data: { key: "value" } });
     });
 
     test("large object truncates strings", () => {
         const obj = { key: "x".repeat(20_000), key2: "y".repeat(20_000), key3: "z".repeat(20_000) };
-        const result = (DataArtifacts as any).minimizeObject(obj);
+        const result = dataArtifacts.minimizeObject(obj);
         expect((result.data as Record<string, unknown>)._tip).toBeUndefined();
         expect((result.data as Record<string, unknown>).key as string).toContain("more chars");
     });
 
     test("custom tip", () => {
         const obj = { key: "x".repeat(20_000), key2: "y".repeat(20_000), key3: "z".repeat(20_000) };
-        const result = (DataArtifacts as any).minimizeObject(obj, { tip: "Custom tip here" });
+        const result = dataArtifacts.minimizeObject(obj, { tip: "Custom tip here" });
         expect((result.data as Record<string, unknown>)._tip).toBe("Custom tip here");
     });
 
     test("empty tip omitted", () => {
         const obj = { key: "x".repeat(20_000), key2: "y".repeat(20_000), key3: "z".repeat(20_000) };
-        const result = (DataArtifacts as any).minimizeObject(obj, { tip: null });
+        const result = dataArtifacts.minimizeObject(obj, { tip: null });
         expect((result.data as Record<string, unknown>)._tip).toBeUndefined();
     });
 
     test("custom character limit", () => {
         const obj = { key: "x".repeat(1000) };
-        const result = (DataArtifacts as any).minimizeObject(obj, {
+        const result = dataArtifacts.minimizeObject(obj, {
             characterLimit: 50,
             minimizedObjectStringLength: 50,
         });
@@ -91,7 +94,7 @@ describe("minimizeObject", () => {
 
     test("inflation guard", () => {
         const obj = { key: "short" };
-        const result = (DataArtifacts as any).minimizeObject(obj, { characterLimit: 5 });
+        const result = dataArtifacts.minimizeObject(obj, { characterLimit: 5 });
         expect(result).toEqual({ data: { key: "short" } });
     });
 });
@@ -171,7 +174,7 @@ describe("minimizeObjectValues inflation guard", () => {
             title: "x".repeat(20_000),
             items: [{ a: 1 }, { a: 2 }],
         };
-        const result = (DataArtifacts as any).minimizeObject(obj, {
+        const result = dataArtifacts.minimizeObject(obj, {
             characterLimit: 10,
             minimizedObjectStringLength: 50,
         });
@@ -183,7 +186,7 @@ describe("minimizeObjectValues inflation guard", () => {
             title: "x".repeat(20_000),
             tags: ["a", "b", "c"],
         };
-        const result = (DataArtifacts as any).minimizeObject(obj, {
+        const result = dataArtifacts.minimizeObject(obj, {
             characterLimit: 10,
             minimizedObjectStringLength: 50,
         });
@@ -198,7 +201,7 @@ describe("minimizeObjectValues inflation guard", () => {
                 salary: 50000 + i * 500,
             })),
         };
-        const result = (DataArtifacts as any).minimizeObject(obj, {
+        const result = dataArtifacts.minimizeObject(obj, {
             characterLimit: 10,
             minimizedObjectStringLength: 50,
         });
@@ -215,7 +218,7 @@ describe("minimizeObjectValues inflation guard", () => {
                 (_, i) => `item_${String(i).padStart(4, "0")}_with_extra_padding`,
             ),
         };
-        const result = (DataArtifacts as any).minimizeObject(obj, {
+        const result = dataArtifacts.minimizeObject(obj, {
             characterLimit: 10,
             minimizedObjectStringLength: 50,
         });

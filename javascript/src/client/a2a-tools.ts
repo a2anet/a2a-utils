@@ -405,7 +405,11 @@ export class A2ATools {
      *
      * @throws Error if artifact cannot be found.
      */
-    private async getArtifact(agentId: string, taskId: string, artifactId: string): Promise<Artifact> {
+    private async getArtifact(
+        agentId: string,
+        taskId: string,
+        artifactId: string,
+    ): Promise<Artifact> {
         // 1. Check task store (local cache)
         const cachedTask = await this.session.taskStore.load(taskId);
         if (cachedTask?.artifacts) {

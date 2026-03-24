@@ -11,6 +11,7 @@ import { TextArtifacts } from "../src/artifacts/text.js";
 import { A2ASession } from "../src/client/a2a-session.js";
 import { AgentManager } from "../src/client/agent-manager.js";
 import { JSONTaskStore } from "../src/tasks/json-task-store.js";
+import { getAgentManagerInternals, getSessionInternals } from "./internal-access.js";
 
 function makeTmpDir(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), "a2a-test-"));
@@ -55,9 +56,10 @@ describe("A2ASession init", () => {
     test("default timeouts", () => {
         const manager = new AgentManager(null);
         const session = new A2ASession(manager);
-        expect((session as any).sendMessageTimeout).toBe(60.0);
-        expect((session as any).getTaskTimeout).toBe(60.0);
-        expect((session as any).getTaskPollInterval).toBe(5.0);
+        const internals = getSessionInternals(session);
+        expect(internals.sendMessageTimeout).toBe(60.0);
+        expect(internals.getTaskTimeout).toBe(60.0);
+        expect(internals.getTaskPollInterval).toBe(5.0);
     });
 
     test("custom timeouts", () => {
@@ -67,16 +69,17 @@ describe("A2ASession init", () => {
             getTaskTimeout: 30.0,
             getTaskPollInterval: 2.0,
         });
-        expect((session as any).sendMessageTimeout).toBe(120.0);
-        expect((session as any).getTaskTimeout).toBe(30.0);
-        expect((session as any).getTaskPollInterval).toBe(2.0);
+        const internals = getSessionInternals(session);
+        expect(internals.sendMessageTimeout).toBe(120.0);
+        expect(internals.getTaskTimeout).toBe(30.0);
+        expect(internals.getTaskPollInterval).toBe(2.0);
     });
 });
 
 describe("send message validation", () => {
     test("agent id not found", async () => {
         const manager = new AgentManager(null);
-        (manager as any).initialized = true;
+        getAgentManagerInternals(manager).initialized = true;
         const session = new A2ASession(manager);
         await expect(session.sendMessage("nonexistent", "hello")).rejects.toThrow("not found");
     });
@@ -85,7 +88,7 @@ describe("send message validation", () => {
 describe("get task validation", () => {
     test("agent id not found", async () => {
         const manager = new AgentManager(null);
-        (manager as any).initialized = true;
+        getAgentManagerInternals(manager).initialized = true;
         const session = new A2ASession(manager);
         await expect(session.getTask("nonexistent", "task-123")).rejects.toThrow("not found");
     });

@@ -26,6 +26,23 @@ function sleep(seconds: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
 }
 
+type TaskStreamEvent = TaskStatusUpdateEvent | Task;
+
+type SessionClient = A2AClient & {
+    sendMessage(
+        request: {
+            message: Message;
+            configuration: { blocking: boolean };
+        },
+        options?: { signal?: AbortSignal },
+    ): Promise<SendMessageResponse>;
+    getTask(params: TaskIdParams, options?: { signal?: AbortSignal }): Promise<GetTaskResponse>;
+    resubscribeTask(
+        params: TaskIdParams,
+        options?: { signal?: AbortSignal },
+    ): AsyncIterable<TaskStreamEvent>;
+};
+
 /** Main interface for sending messages to A2A agents. */
 export class A2ASession {
     readonly agentManager: AgentManager;
@@ -102,7 +119,7 @@ export class A2ASession {
         const start = performance.now();
 
         const client = this.createClient(agentCard, headers);
-        const response: SendMessageResponse = await (client as any).sendMessage(
+        const response: SendMessageResponse = await this.getSessionClient(client).sendMessage(
             {
                 message: a2aMessage,
                 configuration: { blocking: false },
@@ -260,7 +277,7 @@ export class A2ASession {
         const params: TaskIdParams = { id: taskId };
 
         try {
-            const stream = (client as any).resubscribeTask(params, {
+            const stream = this.getSessionClient(client).resubscribeTask(params, {
                 signal: AbortSignal.timeout(timeout * 1000),
             });
 
@@ -316,7 +333,7 @@ export class A2ASession {
 
     /** Fetch a task via A2AClient.getTask(). */
     private async fetchTask(client: A2AClient, taskId: string, timeout?: number): Promise<Task> {
-        const response: GetTaskResponse = await (client as any).getTask(
+        const response: GetTaskResponse = await this.getSessionClient(client).getTask(
             { id: taskId },
             timeout !== undefined ? { signal: AbortSignal.timeout(timeout * 1000) } : undefined,
         );
@@ -328,6 +345,11 @@ export class A2ASession {
         }
 
         return response.result as unknown as Task;
+    }
+
+    /** Narrow the SDK client to the methods this package relies on. */
+    private getSessionClient(client: A2AClient): SessionClient {
+        return client as unknown as SessionClient;
     }
 
     /** Create an A2AClient with optional custom headers. */

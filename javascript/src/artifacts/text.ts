@@ -60,11 +60,7 @@ export class TextArtifacts {
         } else if (hasLine) {
             const lines = text.split("\n");
             const totalLines = lines.length;
-            const [startIdx, endIdx] = TextArtifacts.parseLineRange(
-                lineStart,
-                lineEnd,
-                totalLines,
-            );
+            const [startIdx, endIdx] = TextArtifacts.parseLineRange(lineStart, lineEnd, totalLines);
             const selectedLines = lines.slice(startIdx, endIdx);
             resultText = selectedLines.join("\n");
         } else {
