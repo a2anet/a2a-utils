@@ -1,269 +1,29 @@
 # A2A Utils
 
-A collection of utilities for discovering, communicating, and authenticating with A2A Servers (remote agents).
+[![PyPI - Version](https://img.shields.io/pypi/v/a2a-utils.svg)](https://pypi.org/project/a2a-utils) [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/a2a-utils.svg)](https://pypi.org/project/a2a-utils) [![PyPI - Downloads](https://img.shields.io/pypi/dm/a2a-utils)](https://pypi.org/project/a2a-utils) [![npm version](https://img.shields.io/npm/v/@a2anet/a2a-utils.svg)](https://www.npmjs.com/package/@a2anet/a2a-utils) [![License](https://img.shields.io/github/license/a2anet/a2a-utils)](https://github.com/a2anet/a2a-utils/blob/main/LICENSE) [![A2A Protocol](https://img.shields.io/badge/A2A-Protocol-blue)](https://a2a-protocol.org) [![Discord](https://img.shields.io/discord/1391916121589944320?color=7289da&label=Discord&logo=discord&logoColor=white)](https://discord.gg/674NGXpAjU)
 
-Python is published to [PyPI](https://pypi.org/project/a2a-utils/) as `a2a-utils`.
-JavaScript is published to [npm](https://www.npmjs.com/package/@a2anet/a2a-utils) as `@a2anet/a2a-utils`.
+This package is a comprehensive set of utility functions for using [A2A servers (remote agents)](https://a2a-protocol.org/latest/topics/key-concepts/#core-actors-in-a2a-interactions), it powers the [A2A MCP Server](https://github.com/a2anet/a2a-mcp).
 
-Both languages always share the same version number — a change to either bumps the version for both.
+There is a Python and JavaScript version:
 
-## Prerequisites
+- Python: [A2A Utils Python](./python/README.md)
+- JavaScript: [A2A Utils JavaScript](./javascript/README.md)
 
-- [uv](https://docs.astral.sh/uv/) installed
-- [Bun](https://bun.sh/) installed
+## 💡 Design Decisions
 
-### Cursor
+| Design Question | Considerations | Approach |
+|---|---|---|
+| How should a remote agent's identity be represented to the client agent? | Agent name can't be used because two remote agents might have the same name. Agent Card URL can't be used because authentication headers sent to the agent (e.g. `X-API-Key`) might change the agent. Authentication headers can't be exposed to the agent for security reasons. | `AgentManager` and agent IDs store an Agent Card URL and custom headers. The client agent can use the agent ID to send messages to the remote agent without exposing the Agent Card URL or authentication headers to it. |
+| How should a remote agent's capabilities be represented to the client agent? | The agent's name, description, skill names, and skill descriptions are useful to the client agent. However, showing everything at once to the client agent could overload the context. The client agent should be able to view the remote agents in more depth if they need to. | `AgentManager` and `get_agents_for_llm` returns a summary of the agents at different detail levels. The client agent can view the remote agent's Agent Card in more detail with the `get_agent_for_llm` method. |
+| What should the client agent be shown from the remote agent's response? | A remote agent returns a Task or Message. A Task is a complicated object containing the Task Status, Artifacts, a history of Task Status updates, metadata, etc. not all of which should be added to the LLM's context window. However, it's necessary to share some elements of the response with the client agent. For example, the context ID is required to continue the conversation, Artifacts are the result of the Task, etc. | `A2ATools` introduces LLM-friendly types that are subsets of A2A types: `TaskForLLM`, `MessageForLLM`, `TaskStatusForLLM`, `ArtifactForLLM`, `TextPartForLLM`, `DataPartForLLM`, and `FilePartForLLM`. `A2ASession` returns A2A types for programmatic use. |
+| How should the client agent handle large Artifacts that would overload the context? | Most LLMs have a context window of 128K tokens (~512K characters). Artifacts can easily exceed this. Even if they don't exceed this, tokens increase cost and degrade LLM output quality. | `A2ATools` automatically minimises Artifacts that are more than `send_message_character_limit` characters when JSON stringified. For text Artifacts the first `send_message_character_limit / 2` characters are shown, followed by `[... X characters omitted ...]`, followed by the last `send_message_character_limit / 2` characters. The LLM can use the `view_text_artifact` method to view the omitted characters. |
+| How should the client agent ensure that it has access to Tasks and Artifacts if the remote agent goes offline or has a retention policy? | Agent conversations can be continued days or weeks after they started. In that time, the remote agent might have gone offline or only keep Tasks and Artifacts for X days. | `A2ASession` and `JSONTaskStore` automatically save Task and Artifact(s) as JSON files. When the client agent uses tools like `view_text_artifact`, the Task Store is checked first. |
+| How should the client agent handle files? | Remote agents can send arbitrary files such as text, documents, presentations, spreadsheets, audio, images, videos, etc. The files might be Base64 encoded or sent as a downloadable URL. | `FileStore`, an abstract class similar to the `TaskStore`, and `LocalFileStore`, an implementation that saves files locally. It is out of this package's scope to implement tools to interact with them as A2A supports sending every type of file. However, if the client agent has access to Bash commands and the files are saved locally, it should be straightforward for it to interact with them. |
+| How should the client agent handle Tasks that take a long time to complete? | The default HTTP timeout is 5 seconds. Remote agents often take longer than this to send a response, causing `send_message` to timeout. It's also not good practice to set long timeouts (e.g. more than 1 minute). Some agents return a Task in a non-terminal state (e.g. `working`) immediately and continue processing in the background. | A default `send_message` timeout of 60 seconds (configurable via `send_message_timeout`). `get_task` monitors a Task until it reaches a terminal state (`completed`, `canceled`, `failed`, `rejected`) or an actionable state (`input_required`, `auth_required`). It uses SSE resubscription for real-time updates; otherwise it polls at a configurable interval (default 5 seconds). Both the timeout and poll interval can be overridden per-call. |
 
-- [Cursor](https://cursor.com/en)
-- Prettier
-- Ruff
-- Mypy (by matangover NOT ms-python)
-- Biome
+## 🤝 Join the A2A Net Community
 
-### VSCode
+A2A Net is a site to find and share AI agents and open-source community.
 
-- [VSCode](https://code.visualstudio.com/)
-- [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
-- [Ruff](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff)
-- [Mypy](https://marketplace.visualstudio.com/items?itemName=matangover.mypy)
-- [Biome](https://marketplace.visualstudio.com/items?itemName=biomejs.biome)
-
-### Claude Code
-
-- [Claude Code](https://code.claude.com/docs/en/overview)
-
-## Getting Started
-
-```bash
-make install   # installs Python and JavaScript dependencies
-make lint      # ruff + biome
-make typecheck # mypy + tsc
-make test      # pytest + bun test
-```
-
-## CI/CD
-
-This project includes GitHub Actions workflows for continuous integration and release automation.
-
-### Workflows
-
-| Workflow              | Trigger                         | Description                                                            |
-| --------------------- | ------------------------------- | ---------------------------------------------------------------------- |
-| **CI — Python**       | Push/PR to main touching `python/`     | Runs ruff, mypy, and pytest with coverage                              |
-| **CI — JavaScript**   | Push/PR to main touching `javascript/` | Runs Biome, TypeScript, and Bun test with coverage                     |
-| **Release Please**    | Push to main                    | Creates a single release PR for both languages and publishes to PyPI + npm |
-
-CI workflows are path-filtered — a PR touching only `python/` will only trigger Python CI, and vice versa.
-
-### Conventional Commits
-
-This project uses [release-please](https://github.com/googleapis/release-please) for automated releases. Use [conventional commits](https://www.conventionalcommits.org/) to trigger version bumps.
-
-| Commit prefix | Version bump  | Description                                         |
-| ------------- | ------------- | --------------------------------------------------- |
-| `feat!:`      | Major (x.0.0) | Breaking changes that require major version bump    |
-| `feat:`       | Minor (0.x.0) | New features that add functionality                 |
-| `fix:`        | Patch (0.0.x) | Bug fixes                                           |
-| `perf:`       | Patch (0.0.x) | Performance improvements                            |
-| `build:`      | None          | Build system or dependency changes                  |
-| `chore:`      | None          | Maintenance tasks that don't affect production code |
-| `ci:`         | None          | CI/CD configuration changes                         |
-| `docs:`       | None          | Documentation updates                               |
-| `refactor:`   | None          | Code restructuring without behavior changes         |
-| `revert:`     | None          | Reverting previous commits                          |
-| `style:`      | None          | Code formatting changes                             |
-| `test:`       | None          | Adding or updating tests                            |
-
-### Releases
-
-1. Make commits using conventional commit format
-2. Push to `main` branch
-3. Release Please automatically creates/updates a single Release PR that bumps the version in both `python/` and `javascript/`
-4. When ready, merge the Release PR
-5. A GitHub Release is created and (if configured) the packages are published to both PyPI and npm automatically
-
-### Publishing
-
-#### Python (PyPI)
-
-To enable PyPI publishing:
-
-1. **Create a PyPI account** at https://pypi.org
-
-2. **Publish the first version manually** — this keeps PyPI in sync with npm (both start at 0.1.0, then release-please takes over at 0.2.0):
-
-   ```bash
-   cd python
-   uv build
-   uv publish
-   ```
-
-3. **Add Trusted Publisher on PyPI**:
-
-   - Go to https://pypi.org/manage/project/a2a-utils/settings/publishing/
-   - Add a new Trusted Publisher:
-     - **Owner**: a2anet
-     - **Repository**: a2a-utils
-     - **Workflow name**: `release-please.yml`
-     - **Environment name**: `pypi`
-
-4. **Create GitHub Environment**:
-
-   - Go to your repo Settings → Environments
-   - Create a new environment named `pypi`
-
-#### JavaScript (npm)
-
-To enable npm publishing:
-
-1. **Create an npm account** at https://www.npmjs.com
-
-2. **Publish the first version manually** — Trusted Publishing requires the package to already exist on npm:
-
-   ```bash
-   cd javascript
-   npm publish --access public
-   ```
-
-3. **Add Trusted Publisher on npm**:
-
-   - Go to `https://www.npmjs.com/package/@a2anet/a2a-utils/access`
-   - Under "Publishing access", click "Add trusted publisher" → GitHub Actions
-   - Set the following:
-     - **Owner/Organization**: a2anet
-     - **Repository**: a2a-utils
-     - **Workflow filename**: `release-please.yml`
-     - **Environment**: `npm`
-
-4. **Create GitHub Environment**:
-
-   - Go to your repo Settings → Environments
-   - Create a new environment named `npm`
-
-5. **(Optional) Lock down token access**: On the npm package settings, select "Require two-factor authentication or an automation or trusted publishing access token" to prevent classic token usage
-
-#### Disable Publishing
-
-If you don't want to publish, remove the `build-python`, `publish-python`, `build-javascript`, and `publish-javascript` jobs from `.github/workflows/release-please.yml`. No secrets need to be removed — both PyPI and npm use Trusted Publishing (OIDC), so there are no tokens to clean up. The release workflow will still create GitHub releases with changelogs.
-
-### GitHub Repository Settings
-
-#### Branch Protection Rules
-
-Protect your `main` branch to prevent accidental pushes and ensure code quality:
-
-1. Go to Settings → Branches → Add classic branch protection rule
-2. Branch name pattern: `main`
-3. Enable the following:
-   - **Require a pull request before merging**
-     - Require approvals: 1
-     - Dismiss stale pull request approvals when new commits are pushed
-   - **Require status checks to pass before merging**
-     - Require branches to be up to date before merging
-     - Add status checks (after your first CI run):
-       - `Lint & Format` (from both CI workflows)
-       - `Type Check` (from both CI workflows)
-       - `Test` (from both CI workflows)
-   - **Require linear history**
-
-These rules ensure all code goes through PR review and passes CI checks before merging to `main`.
-
-#### Pull Request Settings
-
-Enforce linear history and clean commits:
-
-1. Go to Settings → General → Pull Requests
-2. Check the following:
-   - Allow squash merging
-   - Automatically delete head branches
-3. Uncheck the following:
-   - Allow merge commits
-   - Allow rebase merging
-
-This ensures every PR becomes a single, clean commit on `main` with a proper conventional commit message.
-
-#### Workflow Permissions
-
-Configure GitHub Actions permissions to allow Release Please to create pull requests:
-
-**For personal repositories:**
-
-1. Go to repository Settings → Actions → General
-2. Scroll down to **Workflow permissions**
-3. Select **"Read and write permissions"**
-4. Check **"Allow GitHub Actions to create and approve pull requests"**
-5. Click **Save**
-
-**For organization repositories:**
-
-If the workflow permissions option is greyed out in your repository settings, you need to configure this at the organization level:
-
-1. Go to your **organization** Settings → Actions → General (requires organization owner permissions)
-2. Scroll down to **Workflow permissions**
-3. Select **"Read and write permissions"**
-4. Check **"Allow GitHub Actions to create and approve pull requests"**
-5. Click **Save**
-
-Without these settings, the Release Please workflow will fail with: `GitHub Actions is not permitted to create or approve pull requests`
-
-### Claude Code GitHub Actions
-
-Enable Claude to respond to `@claude` mentions in PRs and issues:
-
-```bash
-claude
-/install-github-app
-```
-
-This installs the Claude GitHub App and configures the workflow. Once set up, mention `@claude` in any PR or issue comment to get AI assistance with code reviews, bug fixes, and feature implementation.
-
-## Project Structure
-
-```
-a2a-utils/
-├── .github/
-│   └── workflows/
-│       ├── ci-python.yml          # Python: lint, typecheck, test (path-filtered)
-│       ├── ci-javascript.yml      # JavaScript: lint, typecheck, test (path-filtered)
-│       └── release-please.yml     # Unified releases + PyPI & npm publishing
-├── CROSS_REFERENCE.md             # Shared Python ↔ JavaScript parity notes
-├── python/
-│   ├── src/
-│   │   └── a2a_utils/
-│   │       ├── artifacts/         # TextArtifacts, DataArtifacts, minimize_artifacts
-│   │       ├── client/            # AgentManager, A2ASession
-│   │       ├── files/             # FileStore ABC, LocalFileStore
-│   │       ├── tasks/             # JSONTaskStore
-│   │       ├── __init__.py
-│   │       ├── __about__.py       # Version (updated by release-please)
-│   │       └── types.py           # Typed dataclasses for LLM representations
-│   ├── tests/
-│   │   ├── __init__.py
-│   │   ├── test_a2a_session.py
-│   │   ├── test_agent_manager.py
-│   │   ├── test_data_json_path.py
-│   │   ├── test_data_minimization.py
-│   │   ├── test_data_selection.py
-│   │   ├── test_data_summary.py
-│   │   ├── test_file_store.py
-│   │   ├── test_json_task_store.py
-│   │   └── test_version.py
-│   └── pyproject.toml
-├── javascript/
-│   ├── src/
-│   │   └── index.ts               # Main entry point (version updated by release-please)
-│   ├── tests/
-│   │   └── index.test.ts
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── biome.json
-├── .vscode/
-│   └── settings.json
-├── .gitignore
-├── .prettierrc
-├── release-please-config.json
-├── .release-please-manifest.json
-├── Makefile
-├── LICENSE
-└── README.md
-```
+- 🌍 Site: [A2A Net](https://a2anet.com)
+- 🤖 Discord: [Join the Discord](https://discord.gg/674NGXpAjU)
