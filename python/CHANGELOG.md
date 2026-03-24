@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.0](https://github.com/a2anet/a2a-utils/compare/a2a-utils-python-v0.2.0...a2a-utils-python-v0.3.0) (2026-03-24)
+
+
+### Features
+
+* **python:** add A2ATools with LLM-friendly tools for agent frameworks ([bb6b482](https://github.com/a2anet/a2a-utils/commit/bb6b48290ef328e4703c5dc492f36bcf3540c138))
+* **python:** add get_task monitoring, configurable timeouts, and get_agent_card_from_url ([8568a8f](https://github.com/a2anet/a2a-utils/commit/8568a8f3048891c23d013d71661307b71b763555))
+
+
+### Bug Fixes
+
+* **python:** pass custom headers when fetching agent cards and surface init errors ([9a50c5f](https://github.com/a2anet/a2a-utils/commit/9a50c5fc4ca87a35c12369b18b834ba5b1604d15))
+
+
+### Documentation
+
+* write monorepo README, move "Design Decisions" section into it ([8252771](https://github.com/a2anet/a2a-utils/commit/82527714b8ff9803496a811656fcdba8a54d814d))
+
 ## [0.2.0](https://github.com/a2anet/a2a-utils/compare/a2a-utils-python-v0.1.0...a2a-utils-python-v0.2.0) (2026-03-18)
 
 
