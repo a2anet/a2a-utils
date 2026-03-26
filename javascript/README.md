@@ -4,7 +4,7 @@
 
 This package is a comprehensive set of utility functions for using [A2A servers (remote agents)](https://a2a-protocol.org/latest/topics/key-concepts/#core-actors-in-a2a-interactions), it powers the [A2A MCP Server](https://github.com/a2anet/a2a-mcp).
 
-`A2ASession` is at the core of the package, it takes an `AgentManager` (for connecting to agents, viewing Agent Cards, etc.), and optionally a `TaskStore` (for saving Tasks) and `FileStore` (for saving files).
+`A2ASession` is at the core of the package, it takes an `A2AAgents` (for connecting to agents, viewing Agent Cards, etc.), and optionally a `TaskStore` (for saving Tasks) and `FileStore` (for saving files).
 It has two methods, `sendMessage` and `getTask`.
 
 These methods are more sophisticated versions of the same methods in the [A2A SDKs](https://github.com/orgs/a2aproject/repositories).
@@ -13,7 +13,7 @@ It also sends the message as non-blocking and streams the response until the Tas
 If `sendMessage` times out, `getTask` can be called with the Task ID to start streaming the response again.
 If `TaskStore` and `FileStore` are set, the Task, Artifacts, and files will automatically be saved.
 
-`AgentManager` stores user-defined agent IDs that link to Agent Card URLs and headers.
+`A2AAgents` stores user-defined agent IDs that link to Agent Card URLs and headers.
 Agents are stored this way so that Agent Card URLs and headers are not exposed to the agent and because Agent Cards can be dynamic (i.e. change depending on the headers).
 It has five methods, `getAgents`, `getAgentsForLlm`, `getAgent`, `getAgentForLlm`, and `addAgent`.
 See the API reference below for more information.
@@ -44,9 +44,9 @@ bun add @a2anet/a2a-utils
 Create an `A2ASession`, then `A2ATools` to get LLM-friendly tools that can be used out-of-the-box with agent frameworks.
 
 ```typescript
-import { A2ATools, A2ASession, AgentManager, JSONTaskStore, LocalFileStore } from "@a2anet/a2a-utils";
+import { A2ATools, A2ASession, A2AAgents, JSONTaskStore, LocalFileStore } from "@a2anet/a2a-utils";
 
-const agentManager = new AgentManager({
+const agents = new A2AAgents({
     "weather": { url: "https://weather.example.com/.well-known/agent-card.json" },
     "research-bot": {
         url: "https://research.example.com/.well-known/agent-card.json",
@@ -54,7 +54,7 @@ const agentManager = new AgentManager({
     },
 });
 
-const a2aSession = new A2ASession(agentManager, {
+const a2aSession = new A2ASession(agents, {
     taskStore: new JSONTaskStore("./storage/tasks"),
     fileStore: new LocalFileStore("./storage/files"),
 });
@@ -71,7 +71,7 @@ const a2aTools = new A2ATools(a2aSession);
 Ready-made tools for agents to communicate with A2A servers. Every method has LLM-friendly docstrings, returns JSON-serialisable objects, and returns actionable error messages.
 
 ```typescript
-import { A2ATools, A2ASession, AgentManager } from "@a2anet/a2a-utils";
+import { A2ATools, A2ASession, A2AAgents } from "@a2anet/a2a-utils";
 
 const tools = new A2ATools(session);
 ```
@@ -327,10 +327,10 @@ Example result:
 Programmatic interface for sending messages to A2A agents. Returns full A2A SDK types (`Task`, `Message`) for direct use.
 
 ```typescript
-import { A2ASession, AgentManager, JSONTaskStore, LocalFileStore } from "@a2anet/a2a-utils";
+import { A2ASession, A2AAgents, JSONTaskStore, LocalFileStore } from "@a2anet/a2a-utils";
 
 const session = new A2ASession(
-    new AgentManager({
+    new A2AAgents({
         "research-bot": { url: "https://research-bot.example.com/.well-known/agent-card.json" },
     }),
     {
@@ -342,7 +342,7 @@ const session = new A2ASession(
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `agentManager` | `AgentManager` | Yes | The agent manager instance |
+| `agents` | `A2AAgents` | Yes | The agent manager instance |
 | `taskStore` | `TaskStore \| undefined` | No | Task store for persistence (default: `InMemoryTaskStore`) |
 | `fileStore` | `FileStore \| null` | No | File store for saving file artifacts (default: `null`) |
 | `sendMessageTimeout` | `number` | No | HTTP timeout in seconds for `sendMessage` (default: `60.0`) |
@@ -400,15 +400,15 @@ const task = await session.getTask("research-bot", "task-123");
 
 **Returns:** `Task` (from `@a2a-js/sdk`)
 
-### AgentManager
+### A2AAgents
 
 Manages A2A agent cards keyed by user-defined agent IDs.
 
 ```typescript
-import { AgentManager } from "@a2anet/a2a-utils";
+import { A2AAgents } from "@a2anet/a2a-utils";
 
 // From object
-const manager = new AgentManager({
+const manager = new A2AAgents({
     "language-translator": {
         url: "https://example.com/language-translator/agent-card.json",
         custom_headers: { "Authorization": "Bearer tok_123" },
@@ -416,10 +416,10 @@ const manager = new AgentManager({
 });
 
 // From JSON file
-const manager2 = new AgentManager("./agents.json");
+const manager2 = new A2AAgents("./agents.json");
 
 // Empty — add agents later
-const manager3 = new AgentManager();
+const manager3 = new A2AAgents();
 ```
 
 #### `async getAgents(): Promise<Record<string, AgentURLAndCustomHeaders>>`
@@ -1150,7 +1150,7 @@ All types are readonly interfaces exported from `@a2anet/a2a-utils`.
 
 #### `AgentURLAndCustomHeaders`
 
-Returned by `AgentManager.getAgent()` and `AgentManager.getAgents()`.
+Returned by `A2AAgents.getAgent()` and `A2AAgents.getAgents()`.
 
 ```typescript
 const agent: AgentURLAndCustomHeaders = {

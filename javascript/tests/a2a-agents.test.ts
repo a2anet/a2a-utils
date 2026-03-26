@@ -4,9 +4,9 @@
 
 import { describe, expect, spyOn, test } from "bun:test";
 import type { AgentCard, AgentSkill } from "@a2a-js/sdk";
-import { AgentManager } from "../src/client/agent-manager.js";
+import { A2AAgents } from "../src/client/a2a-agents.js";
 import type { AgentURLAndCustomHeaders } from "../src/types.js";
-import { getAgentManagerInternals } from "./internal-access.js";
+import { getA2AAgentsInternals } from "./internal-access.js";
 
 function makeCard(
     name: string,
@@ -32,41 +32,41 @@ function makeCard(
 
 describe("constructor", () => {
     test("none config", () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         expect(internals.config).toEqual({});
         expect(internals.agents).toEqual({});
     });
 
     test("dict config", () => {
         const config = { "my-agent": { url: "https://example.com/agent-card.json" } };
-        const manager = new AgentManager(config);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(config);
+        const internals = getA2AAgentsInternals(manager);
         expect(internals.config["my-agent"]).toBeDefined();
         expect(internals.config["my-agent"].url).toBe("https://example.com/agent-card.json");
     });
 
     test("empty dict", () => {
-        const manager = new AgentManager({});
-        expect(getAgentManagerInternals(manager).config).toEqual({});
+        const manager = new A2AAgents({});
+        expect(getA2AAgentsInternals(manager).config).toEqual({});
     });
 
     test("stores custom timeout", () => {
-        const manager = new AgentManager(null, { timeout: 7.5 });
-        expect(getAgentManagerInternals(manager).timeout).toBe(7.5);
+        const manager = new A2AAgents(null, { timeout: 7.5 });
+        expect(getA2AAgentsInternals(manager).timeout).toBe(7.5);
     });
 });
 
 describe("getAgent", () => {
     test("not found", async () => {
-        const manager = new AgentManager(null);
-        getAgentManagerInternals(manager).initialized = true;
+        const manager = new A2AAgents(null);
+        getA2AAgentsInternals(manager).initialized = true;
         expect(await manager.getAgent("nonexistent")).toBeNull();
     });
 
     test("found", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
         const card = makeCard("Test", "Desc", []);
         internals.agents["my-agent"] = { agentCard: card, customHeaders: {} };
@@ -79,14 +79,14 @@ describe("getAgent", () => {
 
 describe("getAgents", () => {
     test("empty", async () => {
-        const manager = new AgentManager(null);
-        getAgentManagerInternals(manager).initialized = true;
+        const manager = new A2AAgents(null);
+        getA2AAgentsInternals(manager).initialized = true;
         expect(await manager.getAgents()).toEqual({});
     });
 
     test("returns copy", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
         const card = makeCard("Test", "Desc", []);
         internals.agents.a = { agentCard: card, customHeaders: {} };
@@ -101,14 +101,14 @@ describe("getAgents", () => {
 
 describe("getAgentsForLlm", () => {
     test("no agents", async () => {
-        const manager = new AgentManager(null);
-        getAgentManagerInternals(manager).initialized = true;
+        const manager = new A2AAgents(null);
+        getA2AAgentsInternals(manager).initialized = true;
         expect(await manager.getAgentsForLlm()).toEqual({});
     });
 
     test("name detail", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
         const card = makeCard("Test Agent", "A test", [{ name: "search" }]);
         internals.agents.test = { agentCard: card, customHeaders: {} };
@@ -118,8 +118,8 @@ describe("getAgentsForLlm", () => {
     });
 
     test("basic detail", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
         const card = makeCard("Test Agent", "A test", []);
         internals.agents.test = { agentCard: card, customHeaders: {} };
@@ -131,8 +131,8 @@ describe("getAgentsForLlm", () => {
     });
 
     test("skills detail", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
         const card = makeCard("Test", "Desc", [{ name: "search", description: "Find things" }]);
         internals.agents.test = { agentCard: card, customHeaders: {} };
@@ -144,8 +144,8 @@ describe("getAgentsForLlm", () => {
     });
 
     test("full detail", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
         const card = makeCard("Test", "Desc", [{ name: "search", description: "Find things" }]);
         internals.agents.test = { agentCard: card, customHeaders: {} };
@@ -161,8 +161,8 @@ describe("getAgentsForLlm", () => {
     });
 
     test("default is basic", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
         const card = makeCard("Test Agent", "A test", [{ name: "search" }]);
         internals.agents.test = { agentCard: card, customHeaders: {} };
@@ -174,8 +174,8 @@ describe("getAgentsForLlm", () => {
     });
 
     test("sorted by agent id", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
         const cardB = makeCard("B Agent", "Agent B", []);
         const cardA = makeCard("A Agent", "Agent A", []);
@@ -191,14 +191,14 @@ describe("getAgentsForLlm", () => {
 
 describe("getAgentForLlm", () => {
     test("not found", async () => {
-        const manager = new AgentManager(null);
-        getAgentManagerInternals(manager).initialized = true;
+        const manager = new A2AAgents(null);
+        getA2AAgentsInternals(manager).initialized = true;
         expect(await manager.getAgentForLlm("nonexistent")).toBeNull();
     });
 
     test("default is basic", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
         const card = makeCard("Test", "Desc", []);
         internals.agents.test = { agentCard: card, customHeaders: {} };
@@ -208,8 +208,8 @@ describe("getAgentForLlm", () => {
     });
 
     test("name detail", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
         const card = makeCard("Test", "Desc", []);
         internals.agents.test = { agentCard: card, customHeaders: {} };
@@ -219,8 +219,8 @@ describe("getAgentForLlm", () => {
     });
 
     test("skills detail", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
         const card = makeCard("Test", "Desc", [{ name: "search", description: "Find things" }]);
         internals.agents.test = { agentCard: card, customHeaders: {} };
@@ -234,8 +234,8 @@ describe("getAgentForLlm", () => {
     });
 
     test("full detail", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
         const card = makeCard("Test", "Desc", [{ name: "search", description: "Find things" }]);
         internals.agents.test = { agentCard: card, customHeaders: {} };
@@ -251,8 +251,8 @@ describe("getAgentForLlm", () => {
 
 describe("addAgent", () => {
     test("add agent success", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
 
         const card = makeCard("New Agent", "A new agent", []);
@@ -273,8 +273,8 @@ describe("addAgent", () => {
     });
 
     test("add agent with custom headers", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
 
         const card = makeCard("New Agent", "A new agent", []);
@@ -298,8 +298,8 @@ describe("addAgent", () => {
     });
 
     test("add agent duplicate raises", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         internals.initialized = true;
         const card = makeCard("Test", "Desc", []);
         internals.agents.existing = { agentCard: card, customHeaders: {} };
@@ -310,8 +310,8 @@ describe("addAgent", () => {
     });
 
     test("add agent triggers lazy init", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         expect(internals.initialized).toBe(false);
 
         // Mock _fetchAgent to avoid real network calls
@@ -323,40 +323,40 @@ describe("addAgent", () => {
 
 describe("lazy init", () => {
     test("ensure initialized called on get agent", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         expect(internals.initialized).toBe(false);
         await manager.getAgent("nonexistent");
         expect(internals.initialized).toBe(true);
     });
 
     test("ensure initialized called on get agents", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         expect(internals.initialized).toBe(false);
         await manager.getAgents();
         expect(internals.initialized).toBe(true);
     });
 
     test("ensure initialized called on get agent for llm", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         expect(internals.initialized).toBe(false);
         await manager.getAgentForLlm("nonexistent");
         expect(internals.initialized).toBe(true);
     });
 
     test("ensure initialized called on get agents for llm", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         expect(internals.initialized).toBe(false);
         await manager.getAgentsForLlm();
         expect(internals.initialized).toBe(true);
     });
 
     test("idempotent", async () => {
-        const manager = new AgentManager(null);
-        const internals = getAgentManagerInternals(manager);
+        const manager = new A2AAgents(null);
+        const internals = getA2AAgentsInternals(manager);
         await internals.ensureInitialized();
         expect(internals.initialized).toBe(true);
         await internals.ensureInitialized();
@@ -366,7 +366,7 @@ describe("lazy init", () => {
 
 describe("fetch wrapper", () => {
     test("applies timeout and custom headers", async () => {
-        const manager = new AgentManager(null, { timeout: 7.5 });
+        const manager = new A2AAgents(null, { timeout: 7.5 });
         const originalFetch = globalThis.fetch;
         const fetchCalls: RequestInit[] = [];
 
@@ -377,7 +377,7 @@ describe("fetch wrapper", () => {
         globalThis.fetch.preconnect = originalFetch.preconnect;
 
         try {
-            const wrappedFetch = getAgentManagerInternals(manager).createFetchImpl({
+            const wrappedFetch = getA2AAgentsInternals(manager).createFetchImpl({
                 Authorization: "Bearer token",
             });
             await wrappedFetch("https://example.com", {
@@ -396,7 +396,7 @@ describe("fetch wrapper", () => {
     });
 
     test("combines caller signal with timeout", async () => {
-        const manager = new AgentManager(null, { timeout: 7.5 });
+        const manager = new A2AAgents(null, { timeout: 7.5 });
         const originalFetch = globalThis.fetch;
         const fetchCalls: RequestInit[] = [];
         const controller = new AbortController();
@@ -408,7 +408,7 @@ describe("fetch wrapper", () => {
         globalThis.fetch.preconnect = originalFetch.preconnect;
 
         try {
-            const wrappedFetch = getAgentManagerInternals(manager).createFetchImpl({});
+            const wrappedFetch = getA2AAgentsInternals(manager).createFetchImpl({});
             await wrappedFetch("https://example.com", { signal: controller.signal });
         } finally {
             globalThis.fetch = originalFetch;

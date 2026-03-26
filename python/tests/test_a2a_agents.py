@@ -1,39 +1,39 @@
-"""Tests for a2a_utils.agent_manager."""
+"""Tests for a2a_utils.a2a_agents."""
 
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from a2a_utils.client.agent_manager import AgentManager
+from a2a_utils.client.a2a_agents import A2AAgents
 from a2a_utils.types import AgentURLAndCustomHeaders
 
 
 class TestConstructor:
     def test_none_config(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         assert manager._config == {}
         assert manager._agents == {}
 
     def test_dict_config(self) -> None:
         config = {"my-agent": {"url": "https://example.com/agent-card.json"}}
-        manager = AgentManager(config)
+        manager = A2AAgents(config)
         assert "my-agent" in manager._config
         assert manager._config["my-agent"]["url"] == "https://example.com/agent-card.json"
 
     def test_empty_dict(self) -> None:
-        manager = AgentManager({})
+        manager = A2AAgents({})
         assert manager._config == {}
 
 
 class TestGetAgent:
     async def test_not_found(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         assert await manager.get_agent("nonexistent") is None
 
     async def test_found(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         card = MagicMock()
         manager._agents["my-agent"] = AgentURLAndCustomHeaders(
@@ -47,12 +47,12 @@ class TestGetAgent:
 
 class TestGetAgents:
     async def test_empty(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         assert await manager.get_agents() == {}
 
     async def test_returns_copy(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         card = MagicMock()
         manager._agents["a"] = AgentURLAndCustomHeaders(
@@ -84,12 +84,12 @@ class TestGetAgentsForLlm:
         return card
 
     async def test_no_agents(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         assert await manager.get_agents_for_llm() == {}
 
     async def test_name_detail(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         card = self._make_card("Test Agent", "A test", [{"name": "search"}])
         manager._agents["test"] = AgentURLAndCustomHeaders(
@@ -101,7 +101,7 @@ class TestGetAgentsForLlm:
         assert result == {"test": {"name": "Test Agent"}}
 
     async def test_basic_detail(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         card = self._make_card("Test Agent", "A test", [])
         manager._agents["test"] = AgentURLAndCustomHeaders(
@@ -113,7 +113,7 @@ class TestGetAgentsForLlm:
         assert result == {"test": {"name": "Test Agent", "description": "A test"}}
 
     async def test_skills_detail(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         card = self._make_card("Test", "Desc", [{"name": "search", "description": "Find things"}])
         manager._agents["test"] = AgentURLAndCustomHeaders(
@@ -125,7 +125,7 @@ class TestGetAgentsForLlm:
         assert result == {"test": {"name": "Test", "description": "Desc", "skills": ["search"]}}
 
     async def test_full_detail(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         card = self._make_card("Test", "Desc", [{"name": "search", "description": "Find things"}])
         manager._agents["test"] = AgentURLAndCustomHeaders(
@@ -143,7 +143,7 @@ class TestGetAgentsForLlm:
         }
 
     async def test_default_is_basic(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         card = self._make_card("Test Agent", "A test", [{"name": "search"}])
         manager._agents["test"] = AgentURLAndCustomHeaders(
@@ -155,7 +155,7 @@ class TestGetAgentsForLlm:
         assert result == {"test": {"name": "Test Agent", "description": "A test"}}
 
     async def test_sorted_by_agent_id(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         card_b = self._make_card("B Agent", "Agent B", [])
         card_a = self._make_card("A Agent", "Agent A", [])
@@ -192,12 +192,12 @@ class TestGetAgentForLlm:
         return card
 
     async def test_not_found(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         assert await manager.get_agent_for_llm("nonexistent") is None
 
     async def test_default_is_basic(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         card = self._make_card("Test", "Desc", [])
         manager._agents["test"] = AgentURLAndCustomHeaders(
@@ -209,7 +209,7 @@ class TestGetAgentForLlm:
         assert result == {"name": "Test", "description": "Desc"}
 
     async def test_name_detail(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         card = self._make_card("Test", "Desc", [])
         manager._agents["test"] = AgentURLAndCustomHeaders(
@@ -221,7 +221,7 @@ class TestGetAgentForLlm:
         assert result == {"name": "Test"}
 
     async def test_skills_detail(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         card = self._make_card("Test", "Desc", [{"name": "search", "description": "Find things"}])
         manager._agents["test"] = AgentURLAndCustomHeaders(
@@ -233,7 +233,7 @@ class TestGetAgentForLlm:
         assert result == {"name": "Test", "description": "Desc", "skills": ["search"]}
 
     async def test_full_detail(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         card = self._make_card("Test", "Desc", [{"name": "search", "description": "Find things"}])
         manager._agents["test"] = AgentURLAndCustomHeaders(
@@ -252,7 +252,7 @@ class TestGetAgentForLlm:
 class TestAddAgent:
     @pytest.mark.asyncio
     async def test_add_agent_success(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
 
         card = MagicMock()
@@ -277,7 +277,7 @@ class TestAddAgent:
 
     @pytest.mark.asyncio
     async def test_add_agent_with_custom_headers(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
 
         card = MagicMock()
@@ -304,7 +304,7 @@ class TestAddAgent:
 
     @pytest.mark.asyncio
     async def test_add_agent_duplicate_raises(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
         manager._agents["existing"] = AgentURLAndCustomHeaders(
             agent_card=MagicMock(),
@@ -316,7 +316,7 @@ class TestAddAgent:
 
     @pytest.mark.asyncio
     async def test_add_agent_triggers_lazy_init(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         assert not manager._initialized
 
         with patch.object(manager, "_fetch_agent", new_callable=AsyncMock):
@@ -327,31 +327,31 @@ class TestAddAgent:
 
 class TestLazyInit:
     async def test_ensure_initialized_called_on_get_agent(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         assert not manager._initialized
         await manager.get_agent("nonexistent")
         assert manager._initialized
 
     async def test_ensure_initialized_called_on_get_agents(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         assert not manager._initialized
         await manager.get_agents()
         assert manager._initialized
 
     async def test_ensure_initialized_called_on_get_agent_for_llm(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         assert not manager._initialized
         await manager.get_agent_for_llm("nonexistent")
         assert manager._initialized
 
     async def test_ensure_initialized_called_on_get_agents_for_llm(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         assert not manager._initialized
         await manager.get_agents_for_llm()
         assert manager._initialized
 
     async def test_idempotent(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         await manager._ensure_initialized()
         assert manager._initialized
         # Second call should be a no-op

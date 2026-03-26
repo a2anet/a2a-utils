@@ -15,21 +15,21 @@ from a2a.types import (
 )
 
 from a2a_utils.client.a2a_session import A2ASession
-from a2a_utils.client.agent_manager import AgentManager
+from a2a_utils.client.a2a_agents import A2AAgents
 from a2a_utils.client.a2a_tools import A2ATools
 from a2a_utils.types import ArtifactSettings
 
 
 @pytest.fixture
-def agent_manager() -> AgentManager:
-    manager = AgentManager(None)
+def agents() -> A2AAgents:
+    manager = A2AAgents(None)
     manager._initialized = True
     return manager
 
 
 @pytest.fixture
-def session(agent_manager: AgentManager) -> A2ASession:
-    return A2ASession(agent_manager=agent_manager)
+def session(agents: A2AAgents) -> A2ASession:
+    return A2ASession(agents=agents)
 
 
 @pytest.fixture
@@ -63,7 +63,7 @@ class TestA2AToolsInit:
 class TestGetAgents:
     async def test_returns_dict(self, tools: A2ATools) -> None:
         with patch.object(
-            tools._session.agent_manager, "get_agents_for_llm", new_callable=AsyncMock
+            tools._session.agents, "get_agents_for_llm", new_callable=AsyncMock
         ) as mock:
             mock.return_value = {
                 "agent-a": {"name": "Agent A", "description": "Does A things"},
@@ -75,10 +75,10 @@ class TestGetAgents:
 
     async def test_empty_with_init_errors(self, tools: A2ATools) -> None:
         with patch.object(
-            tools._session.agent_manager, "get_agents_for_llm", new_callable=AsyncMock
+            tools._session.agents, "get_agents_for_llm", new_callable=AsyncMock
         ) as mock:
             mock.return_value = {}
-            tools._session.agent_manager._init_errors = {
+            tools._session.agents._init_errors = {
                 "bad-agent": "ConnectionError: refused"
             }
             result = await tools.get_agents()
@@ -89,7 +89,7 @@ class TestGetAgents:
 
     async def test_error_returns_dict_with_error(self, tools: A2ATools) -> None:
         with patch.object(
-            tools._session.agent_manager, "get_agents_for_llm", new_callable=AsyncMock
+            tools._session.agents, "get_agents_for_llm", new_callable=AsyncMock
         ) as mock:
             mock.side_effect = RuntimeError("boom")
             result = await tools.get_agents()
@@ -101,7 +101,7 @@ class TestGetAgents:
 class TestGetAgent:
     async def test_returns_agent_details(self, tools: A2ATools) -> None:
         with patch.object(
-            tools._session.agent_manager, "get_agent_for_llm", new_callable=AsyncMock
+            tools._session.agents, "get_agent_for_llm", new_callable=AsyncMock
         ) as mock:
             mock.return_value = {
                 "name": "Agent A",
@@ -115,11 +115,11 @@ class TestGetAgent:
 
     async def test_not_found_returns_actionable_error(self, tools: A2ATools) -> None:
         with patch.object(
-            tools._session.agent_manager, "get_agent_for_llm", new_callable=AsyncMock
+            tools._session.agents, "get_agent_for_llm", new_callable=AsyncMock
         ) as mock_for_llm:
             mock_for_llm.return_value = None
             with patch.object(
-                tools._session.agent_manager, "get_agents", new_callable=AsyncMock
+                tools._session.agents, "get_agents", new_callable=AsyncMock
             ) as mock_get:
                 mock_get.return_value = {"agent-b": MagicMock()}
                 result = await tools.get_agent("nonexistent")
@@ -131,7 +131,7 @@ class TestGetAgent:
 
     async def test_error_returns_dict_with_error(self, tools: A2ATools) -> None:
         with patch.object(
-            tools._session.agent_manager, "get_agent_for_llm", new_callable=AsyncMock
+            tools._session.agents, "get_agent_for_llm", new_callable=AsyncMock
         ) as mock:
             mock.side_effect = RuntimeError("kaboom")
             result = await tools.get_agent("agent-a")

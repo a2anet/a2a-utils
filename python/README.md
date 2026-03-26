@@ -4,7 +4,7 @@
 
 This package is a comprehensive set of utility functions for using [A2A servers (remote agents)](https://a2a-protocol.org/latest/topics/key-concepts/#core-actors-in-a2a-interactions), it powers the [A2A MCP Server](https://github.com/a2anet/a2a-mcp).
 
-`A2ASession` is at the core of the package, it takes an `AgentManager` (for connecting to agents, viewing Agent Cards, etc.), and optionally a `TaskStore` (for saving Tasks) and `FileStore` (for saving files).
+`A2ASession` is at the core of the package, it takes an `A2AAgents` (for connecting to agents, viewing Agent Cards, etc.), and optionally a `TaskStore` (for saving Tasks) and `FileStore` (for saving files).
 It has two methods, `send_message` and `get_task`.
 
 These methods are more sophisticated versions of the same methods in the [A2A SDKs](https://github.com/orgs/a2aproject/repositories).
@@ -13,7 +13,7 @@ It also sends the message as non-blocking and streams the response until the Tas
 If `send_message` times out, `get_task` can be called with the Task ID to start streaming the response again.
 If `TaskStore` and `FileStore` are set, the Task, Artifacts, and files will automatically be saved.
 
-`AgentManager` stores user-defined agent IDs that link to Agent Card URLs and headers.
+`A2AAgents` stores user-defined agent IDs that link to Agent Card URLs and headers.
 Agents are stored this way so that Agent Card URLs and headers are not exposed to the agent and because Agent Cards can be dynamic (i.e. change depending on the headers).
 It has five methods, `get_agents`, `get_agents_for_llm`, `get_agent`, `get_agent_for_llm`, and `add_agent`.
 See the API reference below for more information.
@@ -46,11 +46,11 @@ Create an `A2ASession`, then `A2ATools` to get LLM-friendly tools that can be us
 ```python
 from pathlib import Path
 
-from a2a_utils import A2ATools, A2ASession, AgentManager, JSONTaskStore, LocalFileStore
+from a2a_utils import A2ATools, A2ASession, A2AAgents, JSONTaskStore, LocalFileStore
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 
-agent_manager = AgentManager({
+agents = A2AAgents({
     "weather": {"url": "https://weather.example.com/.well-known/agent-card.json"},
     "research-bot": {
         "url": "https://research.example.com/.well-known/agent-card.json",
@@ -59,7 +59,7 @@ agent_manager = AgentManager({
 })
 
 a2a_session = A2ASession(
-    agent_manager=agent_manager, 
+    agents=agents, 
     task_store=JSONTaskStore(Path("./storage/tasks")), 
     file_store=LocalFileStore(Path("./storage/files"))
 )
@@ -78,7 +78,7 @@ agent = create_agent(model, tools=a2a_tools)
 Ready-made tools for agents to communicate with A2A servers. Every method has LLM-friendly docstrings, returns JSON-serialisable objects, and returns actionable error messages.
 
 ```python
-from a2a_utils import A2ATools, A2ASession, AgentManager
+from a2a_utils import A2ATools, A2ASession, A2AAgents
 
 tools = A2ATools(session)
 ```
@@ -335,10 +335,10 @@ Programmatic interface for sending messages to A2A agents. Returns full A2A SDK 
 
 ```python
 from pathlib import Path
-from a2a_utils import A2ASession, AgentManager, JSONTaskStore, LocalFileStore
+from a2a_utils import A2ASession, A2AAgents, JSONTaskStore, LocalFileStore
 
 session = A2ASession(
-    agent_manager=AgentManager({
+    agents=A2AAgents({
         "research-bot": {"url": "https://research-bot.example.com/.well-known/agent-card.json"}
     }),
     task_store=JSONTaskStore(Path("./storage/tasks")),
@@ -348,7 +348,7 @@ session = A2ASession(
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `agent_manager` | `AgentManager` | Yes | The agent manager instance |
+| `agents` | `A2AAgents` | Yes | The agent manager instance |
 | `task_store` | `TaskStore \| None` | No | Task store for persistence (default: `InMemoryTaskStore`) |
 | `file_store` | `FileStore \| None` | No | File store for saving file artifacts (default: `None`) |
 | `send_message_timeout` | `float` | No | HTTP timeout in seconds for `send_message` (default: `60.0`) |
@@ -406,15 +406,15 @@ task = await session.get_task("research-bot", "task-123")
 
 **Returns:** `Task` (from `a2a.types`)
 
-### AgentManager
+### A2AAgents
 
 Manages A2A agent cards keyed by user-defined agent IDs.
 
 ```python
-from a2a_utils import AgentManager
+from a2a_utils import A2AAgents
 
 # From dict
-manager = AgentManager({
+manager = A2AAgents({
     "language-translator": {
         "url": "https://example.com/language-translator/agent-card.json",
         "custom_headers": {"Authorization": "Bearer tok_123"},
@@ -422,10 +422,10 @@ manager = AgentManager({
 })
 
 # From JSON file
-manager = AgentManager("./agents.json")
+manager = A2AAgents("./agents.json")
 
 # Empty — add agents later
-manager = AgentManager()
+manager = A2AAgents()
 ```
 
 #### `async get_agents() -> dict[str, AgentURLAndCustomHeaders]`
@@ -1228,7 +1228,7 @@ All types are frozen dataclasses exported from `a2a_utils`.
 
 #### `AgentURLAndCustomHeaders`
 
-Returned by `AgentManager.get_agent()` and `AgentManager.get_agents()`.
+Returned by `A2AAgents.get_agent()` and `A2AAgents.get_agents()`.
 
 ```python
 AgentURLAndCustomHeaders(

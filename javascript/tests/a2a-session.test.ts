@@ -9,9 +9,9 @@ import * as path from "node:path";
 import { InMemoryTaskStore, type TaskStore } from "@a2a-js/sdk/server";
 import { TextArtifacts } from "../src/artifacts/text.js";
 import { A2ASession } from "../src/client/a2a-session.js";
-import { AgentManager } from "../src/client/agent-manager.js";
+import { A2AAgents } from "../src/client/a2a-agents.js";
 import { JSONTaskStore } from "../src/tasks/json-task-store.js";
-import { getAgentManagerInternals, getSessionInternals } from "./internal-access.js";
+import { getA2AAgentsInternals, getSessionInternals } from "./internal-access.js";
 
 function makeTmpDir(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), "a2a-test-"));
@@ -21,10 +21,10 @@ describe("A2ASession init", () => {
     test("with components", () => {
         const tmpDir = makeTmpDir();
         try {
-            const manager = new AgentManager(null);
+            const manager = new A2AAgents(null);
             const store = new JSONTaskStore(path.join(tmpDir, "tasks"));
             const session = new A2ASession(manager, { taskStore: store });
-            expect(session.agentManager).toBe(manager);
+            expect(session.agents).toBe(manager);
             expect(session.taskStore).toBe(store);
         } finally {
             fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -32,13 +32,13 @@ describe("A2ASession init", () => {
     });
 
     test("default task store is in memory", () => {
-        const manager = new AgentManager(null);
+        const manager = new A2AAgents(null);
         const session = new A2ASession(manager);
         expect(session.taskStore).toBeInstanceOf(InMemoryTaskStore);
     });
 
     test("custom task store", () => {
-        const manager = new AgentManager(null);
+        const manager = new A2AAgents(null);
         const store: TaskStore = {
             save: async () => {},
             load: async () => undefined,
@@ -48,13 +48,13 @@ describe("A2ASession init", () => {
     });
 
     test("file store default none", () => {
-        const manager = new AgentManager(null);
+        const manager = new A2AAgents(null);
         const session = new A2ASession(manager);
         expect(session.fileStore).toBeNull();
     });
 
     test("default timeouts", () => {
-        const manager = new AgentManager(null);
+        const manager = new A2AAgents(null);
         const session = new A2ASession(manager);
         const internals = getSessionInternals(session);
         expect(internals.sendMessageTimeout).toBe(60.0);
@@ -63,7 +63,7 @@ describe("A2ASession init", () => {
     });
 
     test("custom timeouts", () => {
-        const manager = new AgentManager(null);
+        const manager = new A2AAgents(null);
         const session = new A2ASession(manager, {
             sendMessageTimeout: 120.0,
             getTaskTimeout: 30.0,
@@ -78,8 +78,8 @@ describe("A2ASession init", () => {
 
 describe("send message validation", () => {
     test("agent id not found", async () => {
-        const manager = new AgentManager(null);
-        getAgentManagerInternals(manager).initialized = true;
+        const manager = new A2AAgents(null);
+        getA2AAgentsInternals(manager).initialized = true;
         const session = new A2ASession(manager);
         await expect(session.sendMessage("nonexistent", "hello")).rejects.toThrow("not found");
     });
@@ -87,8 +87,8 @@ describe("send message validation", () => {
 
 describe("get task validation", () => {
     test("agent id not found", async () => {
-        const manager = new AgentManager(null);
-        getAgentManagerInternals(manager).initialized = true;
+        const manager = new A2AAgents(null);
+        getA2AAgentsInternals(manager).initialized = true;
         const session = new A2ASession(manager);
         await expect(session.getTask("nonexistent", "task-123")).rejects.toThrow("not found");
     });

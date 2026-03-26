@@ -6,15 +6,15 @@ import { describe, expect, spyOn, test } from "bun:test";
 import type { AgentCard, Artifact, Message, Task } from "@a2a-js/sdk";
 import { A2ASession } from "../src/client/a2a-session.js";
 import { A2ATools } from "../src/client/a2a-tools.js";
-import { AgentManager } from "../src/client/agent-manager.js";
+import { A2AAgents } from "../src/client/a2a-agents.js";
 import { ArtifactSettings } from "../src/types.js";
-import { getAgentManagerInternals, getToolsInternals, getToolsStatics } from "./internal-access.js";
+import { getA2AAgentsInternals, getToolsInternals, getToolsStatics } from "./internal-access.js";
 
 const toolsStatics = getToolsStatics(A2ATools);
 
-function makeManager(): AgentManager {
-    const manager = new AgentManager(null);
-    getAgentManagerInternals(manager).initialized = true;
+function makeManager(): A2AAgents {
+    const manager = new A2AAgents(null);
+    getA2AAgentsInternals(manager).initialized = true;
     return manager;
 }
 
@@ -58,7 +58,7 @@ describe("A2ATools init", () => {
 describe("getAgents", () => {
     test("returns dict", async () => {
         const tools = makeTools();
-        spyOn(getToolsInternals(tools).session.agentManager, "getAgentsForLlm").mockResolvedValue({
+        spyOn(getToolsInternals(tools).session.agents, "getAgentsForLlm").mockResolvedValue({
             "agent-a": { name: "Agent A", description: "Does A things" },
         });
         const result = await tools.getAgents();
@@ -68,8 +68,8 @@ describe("getAgents", () => {
 
     test("empty with init errors", async () => {
         const tools = makeTools();
-        const managerInternals = getAgentManagerInternals(
-            getToolsInternals(tools).session.agentManager,
+        const managerInternals = getA2AAgentsInternals(
+            getToolsInternals(tools).session.agents,
         );
         spyOn(managerInternals, "getAgentsForLlm").mockResolvedValue({});
         managerInternals.initErrors = {
@@ -84,7 +84,7 @@ describe("getAgents", () => {
 
     test("error returns dict with error", async () => {
         const tools = makeTools();
-        spyOn(getToolsInternals(tools).session.agentManager, "getAgentsForLlm").mockRejectedValue(
+        spyOn(getToolsInternals(tools).session.agents, "getAgentsForLlm").mockRejectedValue(
             new Error("boom"),
         );
         const result = await tools.getAgents();
@@ -96,7 +96,7 @@ describe("getAgents", () => {
 describe("getAgent", () => {
     test("returns agent details", async () => {
         const tools = makeTools();
-        spyOn(getToolsInternals(tools).session.agentManager, "getAgentForLlm").mockResolvedValue({
+        spyOn(getToolsInternals(tools).session.agents, "getAgentForLlm").mockResolvedValue({
             name: "Agent A",
             description: "Does A things",
             skills: [{ name: "search", description: "Search the web" }],
@@ -108,10 +108,10 @@ describe("getAgent", () => {
 
     test("not found returns actionable error", async () => {
         const tools = makeTools();
-        spyOn(getToolsInternals(tools).session.agentManager, "getAgentForLlm").mockResolvedValue(
+        spyOn(getToolsInternals(tools).session.agents, "getAgentForLlm").mockResolvedValue(
             null,
         );
-        spyOn(getToolsInternals(tools).session.agentManager, "getAgents").mockResolvedValue({
+        spyOn(getToolsInternals(tools).session.agents, "getAgents").mockResolvedValue({
             "agent-b": { agentCard: {} as unknown as AgentCard, customHeaders: {} },
         });
         const result = await tools.getAgent("nonexistent");
@@ -123,7 +123,7 @@ describe("getAgent", () => {
 
     test("error returns dict with error", async () => {
         const tools = makeTools();
-        spyOn(getToolsInternals(tools).session.agentManager, "getAgentForLlm").mockRejectedValue(
+        spyOn(getToolsInternals(tools).session.agents, "getAgentForLlm").mockRejectedValue(
             new Error("kaboom"),
         );
         const result = await tools.getAgent("agent-a");

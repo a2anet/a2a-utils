@@ -54,8 +54,8 @@ class A2ATools:
         If any agents failed to load, an "errors" field is included with details.
         """
         try:
-            result = await self._session.agent_manager.get_agents_for_llm(detail="basic")
-            init_errors = self._session.agent_manager.initialization_errors
+            result = await self._session.agents.get_agents_for_llm(detail="basic")
+            init_errors = self._session.agents.initialization_errors
             if not result and init_errors:
                 return {
                     "agents": result,
@@ -79,9 +79,9 @@ class A2ATools:
             agent_id: The agent's unique identifier (from get_agents).
         """
         try:
-            result = await self._session.agent_manager.get_agent_for_llm(agent_id, detail="full")
+            result = await self._session.agents.get_agent_for_llm(agent_id, detail="full")
             if result is None:
-                available = sorted(await self._session.agent_manager.get_agents())
+                available = sorted(await self._session.agents.get_agents())
                 return {
                     "error": True,
                     "error_message": (
