@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/a2anet/a2a-utils/compare/a2a-utils-python-v0.3.0...a2a-utils-python-v0.4.0) (2026-03-26)
+
+
+### Features
+
+* rename AgentManager to A2AAgents for consistent API naming ([#4](https://github.com/a2anet/a2a-utils/issues/4)) ([435fb71](https://github.com/a2anet/a2a-utils/commit/435fb71188c53ee5d72fb9e195d30e3f92e03449))
+
 ## [0.3.0](https://github.com/a2anet/a2a-utils/compare/a2a-utils-python-v0.2.0...a2a-utils-python-v0.3.0) (2026-03-24)
 
 
