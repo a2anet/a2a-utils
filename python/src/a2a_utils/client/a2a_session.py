@@ -155,9 +155,7 @@ class A2ASession:
                 agent_card.capabilities is not None and agent_card.capabilities.streaming
             )
             if supports_streaming:
-                task = await self._get_task_streaming(
-                    agent_card, headers, task.id, remaining
-                )
+                task = await self._get_task_streaming(agent_card, headers, task.id, remaining)
             else:
                 task = await self._get_task_polling(
                     agent_card, headers, task.id, remaining, self._get_task_poll_interval

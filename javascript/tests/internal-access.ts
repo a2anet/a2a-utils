@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { Artifact } from "@a2a-js/sdk";
+import type { A2AAgents } from "../src/client/a2a-agents.js";
 import type { A2ASession } from "../src/client/a2a-session.js";
 import type { A2ATools } from "../src/client/a2a-tools.js";
-import type { A2AAgents } from "../src/client/a2a-agents.js";
 import type { AgentURLAndCustomHeaders, ArtifactSettings } from "../src/types.js";
 
 export type A2AAgentsInternals = A2AAgents & {

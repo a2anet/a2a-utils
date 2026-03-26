@@ -78,9 +78,7 @@ class TestGetAgents:
             tools._session.agents, "get_agents_for_llm", new_callable=AsyncMock
         ) as mock:
             mock.return_value = {}
-            tools._session.agents._init_errors = {
-                "bad-agent": "ConnectionError: refused"
-            }
+            tools._session.agents._init_errors = {"bad-agent": "ConnectionError: refused"}
             result = await tools.get_agents()
 
         assert result["agents"] == {}
@@ -306,7 +304,9 @@ class TestViewDataArtifact:
         with patch.object(tools, "_get_artifact", new_callable=AsyncMock) as mock:
             mock.return_value = artifact
             result = await tools.view_data_artifact(
-                "agent-a", "task-1", "art-1",
+                "agent-a",
+                "task-1",
+                "art-1",
                 json_path="employees",
                 rows="0",
                 columns="name",

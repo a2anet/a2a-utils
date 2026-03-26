@@ -8,8 +8,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { InMemoryTaskStore, type TaskStore } from "@a2a-js/sdk/server";
 import { TextArtifacts } from "../src/artifacts/text.js";
-import { A2ASession } from "../src/client/a2a-session.js";
 import { A2AAgents } from "../src/client/a2a-agents.js";
+import { A2ASession } from "../src/client/a2a-session.js";
 import { JSONTaskStore } from "../src/tasks/json-task-store.js";
 import { getA2AAgentsInternals, getSessionInternals } from "./internal-access.js";
 

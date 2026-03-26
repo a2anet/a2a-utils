@@ -4,9 +4,9 @@
 
 import { describe, expect, spyOn, test } from "bun:test";
 import type { AgentCard, Artifact, Message, Task } from "@a2a-js/sdk";
+import { A2AAgents } from "../src/client/a2a-agents.js";
 import { A2ASession } from "../src/client/a2a-session.js";
 import { A2ATools } from "../src/client/a2a-tools.js";
-import { A2AAgents } from "../src/client/a2a-agents.js";
 import { ArtifactSettings } from "../src/types.js";
 import { getA2AAgentsInternals, getToolsInternals, getToolsStatics } from "./internal-access.js";
 
@@ -68,9 +68,7 @@ describe("getAgents", () => {
 
     test("empty with init errors", async () => {
         const tools = makeTools();
-        const managerInternals = getA2AAgentsInternals(
-            getToolsInternals(tools).session.agents,
-        );
+        const managerInternals = getA2AAgentsInternals(getToolsInternals(tools).session.agents);
         spyOn(managerInternals, "getAgentsForLlm").mockResolvedValue({});
         managerInternals.initErrors = {
             "bad-agent": "ConnectionError: refused",
@@ -108,9 +106,7 @@ describe("getAgent", () => {
 
     test("not found returns actionable error", async () => {
         const tools = makeTools();
-        spyOn(getToolsInternals(tools).session.agents, "getAgentForLlm").mockResolvedValue(
-            null,
-        );
+        spyOn(getToolsInternals(tools).session.agents, "getAgentForLlm").mockResolvedValue(null);
         spyOn(getToolsInternals(tools).session.agents, "getAgents").mockResolvedValue({
             "agent-b": { agentCard: {} as unknown as AgentCard, customHeaders: {} },
         });
