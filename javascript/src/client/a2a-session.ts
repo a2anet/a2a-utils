@@ -20,7 +20,7 @@ import { InMemoryTaskStore, type TaskStore } from "@a2a-js/sdk/server";
 import { v4 as uuidv4 } from "uuid";
 import type { FileStore } from "../files/file-store.js";
 import { TERMINAL_OR_ACTIONABLE_STATES } from "../types.js";
-import type { AgentManager } from "./agent-manager.js";
+import type { A2AAgents } from "./a2a-agents.js";
 
 function sleep(seconds: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
@@ -45,7 +45,7 @@ type SessionClient = A2AClient & {
 
 /** Main interface for sending messages to A2A agents. */
 export class A2ASession {
-    readonly agentManager: AgentManager;
+    readonly agents: A2AAgents;
     readonly taskStore: TaskStore;
     readonly fileStore: FileStore | null;
     private readonly sendMessageTimeout: number;
@@ -53,7 +53,7 @@ export class A2ASession {
     private readonly getTaskPollInterval: number;
 
     constructor(
-        agentManager: AgentManager,
+        agents: A2AAgents,
         opts?: {
             taskStore?: TaskStore;
             fileStore?: FileStore | null;
@@ -62,7 +62,7 @@ export class A2ASession {
             getTaskPollInterval?: number;
         },
     ) {
-        this.agentManager = agentManager;
+        this.agents = agents;
         this.taskStore = opts?.taskStore ?? new InMemoryTaskStore();
         this.fileStore = opts?.fileStore ?? null;
         this.sendMessageTimeout = opts?.sendMessageTimeout ?? 60.0;
@@ -380,9 +380,9 @@ export class A2ASession {
      * @throws Error if agent cannot be resolved.
      */
     private async resolveAgent(agentId: string): Promise<[AgentCard, Record<string, string>]> {
-        const agent = await this.agentManager.getAgent(agentId);
+        const agent = await this.agents.getAgent(agentId);
         if (agent === null) {
-            const agents = await this.agentManager.getAgents();
+            const agents = await this.agents.getAgents();
             const available = Object.keys(agents).sort().join(", ");
             throw new Error(`Agent '${agentId}' not found. Available agents: ${available}`);
         }

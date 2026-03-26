@@ -50,8 +50,8 @@ export class A2ATools {
      */
     async getAgents(): Promise<Record<string, unknown>> {
         try {
-            const result = await this.session.agentManager.getAgentsForLlm("basic");
-            const initErrors = this.session.agentManager.initializationErrors;
+            const result = await this.session.agents.getAgentsForLlm("basic");
+            const initErrors = this.session.agents.initializationErrors;
             if (Object.keys(result).length === 0 && Object.keys(initErrors).length > 0) {
                 const errors: Record<string, string> = {};
                 for (const [agentId, error] of Object.entries(initErrors)) {
@@ -76,9 +76,9 @@ export class A2ATools {
      */
     async getAgent(agentId: string): Promise<Record<string, unknown>> {
         try {
-            const result = await this.session.agentManager.getAgentForLlm(agentId, "full");
+            const result = await this.session.agents.getAgentForLlm(agentId, "full");
             if (result === null) {
-                const available = Object.keys(await this.session.agentManager.getAgents()).sort();
+                const available = Object.keys(await this.session.agents.getAgents()).sort();
                 return {
                     error: true,
                     error_message: `Agent '${agentId}' not found. Use get_agents to see available agents. Available: ${available.length > 0 ? available.join(", ") : "(none)"}`,

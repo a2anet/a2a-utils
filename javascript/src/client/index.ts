@@ -4,4 +4,4 @@
 
 export { A2ASession } from "./a2a-session.js";
 export { A2ATools } from "./a2a-tools.js";
-export { AgentManager } from "./agent-manager.js";
+export { A2AAgents } from "./a2a-agents.js";

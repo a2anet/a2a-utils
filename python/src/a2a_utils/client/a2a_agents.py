@@ -14,7 +14,7 @@ from loguru import logger
 from ..types import AgentURLAndCustomHeaders
 
 
-class AgentManager:
+class A2AAgents:
     """Manages A2A agent cards keyed by user-defined agent IDs.
 
     Agents are configured via a dict mapping agent_id to config, or a JSON file path.

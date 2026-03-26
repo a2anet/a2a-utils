@@ -32,7 +32,7 @@ The root package exports are intentionally aligned.
 | `__version__` | `VERSION` |
 | `A2ASession` | `A2ASession` |
 | `A2ATools` | `A2ATools` |
-| `AgentManager` | `AgentManager` |
+| `A2AAgents` | `A2AAgents` |
 | `JSONTaskStore` | `JSONTaskStore` |
 | `DataArtifacts` | `DataArtifacts` |
 | `TextArtifacts` | `TextArtifacts` |
@@ -56,7 +56,7 @@ The root package exports are intentionally aligned.
 | --- | --- | --- |
 | `client/a2a_session.py` | `client/a2a-session.ts` | Same role, same top-level methods |
 | `client/a2a_tools.py` | `client/a2a-tools.ts` | Same tool surface |
-| `client/agent_manager.py` | `client/agent-manager.ts` | Same agent registry model |
+| `client/a2a_agents.py` | `client/a2a-agents.ts` | Same agent registry model |
 | `artifacts/text.py` | `artifacts/text.ts` | Same text artifact viewing/minimization behavior |
 | `artifacts/data.py` | `artifacts/data.ts` | Same data artifact viewing/minimization goals |
 | `artifacts/__init__.py` | `artifacts/index.ts` | Shared artifact conversion/minimization entrypoint |
@@ -104,7 +104,7 @@ The test suites are intended to mirror the same feature areas.
 | `tests/test_data_summary.py` | `tests/data-summary.test.ts` |
 | `tests/test_a2a_session.py` | `tests/a2a-session.test.ts` |
 | `tests/test_a2a_tools.py` | `tests/a2a-tools.test.ts` |
-| `tests/test_agent_manager.py` | `tests/agent-manager.test.ts` |
+| `tests/test_a2a_agents.py` | `tests/a2a-agents.test.ts` |
 | `tests/test_file_store.py` | `tests/file-store.test.ts` |
 | `tests/test_json_task_store.py` | `tests/json-task-store.test.ts` |
 

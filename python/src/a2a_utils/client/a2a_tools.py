@@ -2,7 +2,7 @@
 
 import dataclasses
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from a2a.types import (
     Artifact,
@@ -54,8 +54,8 @@ class A2ATools:
         If any agents failed to load, an "errors" field is included with details.
         """
         try:
-            result = await self._session.agent_manager.get_agents_for_llm(detail="basic")
-            init_errors = self._session.agent_manager.initialization_errors
+            result = await self._session.agents.get_agents_for_llm(detail="basic")
+            init_errors = self._session.agents.initialization_errors
             if not result and init_errors:
                 return {
                     "agents": result,
@@ -79,9 +79,9 @@ class A2ATools:
             agent_id: The agent's unique identifier (from get_agents).
         """
         try:
-            result = await self._session.agent_manager.get_agent_for_llm(agent_id, detail="full")
+            result = await self._session.agents.get_agent_for_llm(agent_id, detail="full")
             if result is None:
-                available = sorted(await self._session.agent_manager.get_agents())
+                available = sorted(await self._session.agents.get_agents())
                 return {
                     "error": True,
                     "error_message": (
@@ -135,7 +135,7 @@ class A2ATools:
                 llm_result = await self._build_task_for_llm(result)
             else:
                 llm_result = await self._build_message_for_llm(result)
-            return self._serialize_for_json(llm_result)
+            return cast(dict[str, Any], self._serialize_for_json(llm_result))
         except ValueError as e:
             error_msg = str(e)
             if "not found" in error_msg.lower():
@@ -184,7 +184,7 @@ class A2ATools:
                 poll_interval=poll_interval,
             )
             llm_result = await self._build_task_for_llm(result)
-            return self._serialize_for_json(llm_result)
+            return cast(dict[str, Any], self._serialize_for_json(llm_result))
         except ValueError as e:
             error_msg = str(e)
             if "not found" in error_msg.lower():
@@ -245,7 +245,7 @@ class A2ATools:
                 name=artifact.name,
                 parts=[TextPartForLLM(kind="text", text=filtered)],
             )
-            return self._serialize_for_json(result)
+            return cast(dict[str, Any], self._serialize_for_json(result))
         except ValueError as e:
             error_msg = str(e)
             if "not found" in error_msg.lower():
@@ -309,7 +309,7 @@ class A2ATools:
                 name=artifact.name,
                 parts=[DataPartForLLM(kind="data", data=filtered)],
             )
-            return self._serialize_for_json(result)
+            return cast(dict[str, Any], self._serialize_for_json(result))
         except ValueError as e:
             error_msg = str(e)
             if "not found" in error_msg.lower():

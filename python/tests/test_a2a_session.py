@@ -8,48 +8,48 @@ from a2a.server.tasks import InMemoryTaskStore, TaskStore
 
 from a2a_utils.artifacts import TextArtifacts
 from a2a_utils.client.a2a_session import A2ASession
-from a2a_utils.client.agent_manager import AgentManager
+from a2a_utils.client.a2a_agents import A2AAgents
 from a2a_utils.tasks.json_task_store import JSONTaskStore
 
 
 class TestA2ASessionInit:
     def test_with_components(self, tmp_path: Path) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         store = JSONTaskStore(tmp_path / "tasks")
         session = A2ASession(
-            agent_manager=manager,
+            agents=manager,
             task_store=store,
         )
-        assert session.agent_manager is manager
+        assert session.agents is manager
         assert session.task_store is store
 
     def test_default_task_store_is_in_memory(self) -> None:
-        manager = AgentManager(None)
-        session = A2ASession(agent_manager=manager)
+        manager = A2AAgents(None)
+        session = A2ASession(agents=manager)
         assert isinstance(session.task_store, InMemoryTaskStore)
 
     def test_custom_task_store(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         store = MagicMock(spec=TaskStore)
-        session = A2ASession(agent_manager=manager, task_store=store)
+        session = A2ASession(agents=manager, task_store=store)
         assert session.task_store is store
 
     def test_file_store_default_none(self) -> None:
-        manager = AgentManager(None)
-        session = A2ASession(agent_manager=manager)
+        manager = A2AAgents(None)
+        session = A2ASession(agents=manager)
         assert session.file_store is None
 
     def test_default_timeouts(self) -> None:
-        manager = AgentManager(None)
-        session = A2ASession(agent_manager=manager)
+        manager = A2AAgents(None)
+        session = A2ASession(agents=manager)
         assert session._send_message_timeout == 60.0
         assert session._get_task_timeout == 60.0
         assert session._get_task_poll_interval == 5.0
 
     def test_custom_timeouts(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         session = A2ASession(
-            agent_manager=manager,
+            agents=manager,
             send_message_timeout=120.0,
             get_task_timeout=30.0,
             get_task_poll_interval=2.0,
@@ -62,9 +62,9 @@ class TestA2ASessionInit:
 class TestSendMessageValidation:
     @pytest.mark.asyncio
     async def test_agent_id_not_found(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
-        session = A2ASession(agent_manager=manager)
+        session = A2ASession(agents=manager)
         with pytest.raises(ValueError, match="not found"):
             await session.send_message("nonexistent", "hello")
 
@@ -72,9 +72,9 @@ class TestSendMessageValidation:
 class TestGetTaskValidation:
     @pytest.mark.asyncio
     async def test_agent_id_not_found(self) -> None:
-        manager = AgentManager(None)
+        manager = A2AAgents(None)
         manager._initialized = True
-        session = A2ASession(agent_manager=manager)
+        session = A2ASession(agents=manager)
         with pytest.raises(ValueError, match="not found"):
             await session.get_task("nonexistent", "task-123")
 

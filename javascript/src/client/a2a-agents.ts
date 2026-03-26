@@ -16,7 +16,7 @@ import type { AgentURLAndCustomHeaders } from "../types.js";
  *
  * Agents are configured via a dict mapping agent_id to config, or a JSON file path.
  */
-export class AgentManager {
+export class A2AAgents {
     private config: Record<string, Record<string, unknown>>;
     private agents: Record<string, AgentURLAndCustomHeaders> = {};
     private initErrors: Record<string, string> = {};

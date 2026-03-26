@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { Artifact } from "@a2a-js/sdk";
+import type { A2AAgents } from "../src/client/a2a-agents.js";
 import type { A2ASession } from "../src/client/a2a-session.js";
 import type { A2ATools } from "../src/client/a2a-tools.js";
-import type { AgentManager } from "../src/client/agent-manager.js";
 import type { AgentURLAndCustomHeaders, ArtifactSettings } from "../src/types.js";
 
-export type AgentManagerInternals = AgentManager & {
+export type A2AAgentsInternals = A2AAgents & {
     config: Record<string, Record<string, unknown>>;
     agents: Record<string, AgentURLAndCustomHeaders>;
     initErrors: Record<string, string>;
@@ -63,8 +63,8 @@ export type TextArtifactsStatics = {
     ): [number, number];
 };
 
-export function getAgentManagerInternals(manager: AgentManager): AgentManagerInternals {
-    return manager as unknown as AgentManagerInternals;
+export function getA2AAgentsInternals(manager: A2AAgents): A2AAgentsInternals {
+    return manager as unknown as A2AAgentsInternals;
 }
 
 export function getSessionInternals(session: A2ASession): A2ASessionInternals {

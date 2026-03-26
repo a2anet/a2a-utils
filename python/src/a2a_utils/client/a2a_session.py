@@ -34,7 +34,7 @@ from loguru import logger
 
 from ..files import FileStore
 from ..types import TERMINAL_OR_ACTIONABLE_STATES
-from .agent_manager import AgentManager
+from .a2a_agents import A2AAgents
 
 
 class A2ASession:
@@ -42,7 +42,7 @@ class A2ASession:
 
     def __init__(
         self,
-        agent_manager: AgentManager,
+        agents: A2AAgents,
         *,
         task_store: TaskStore | None = None,
         file_store: FileStore | None = None,
@@ -50,7 +50,7 @@ class A2ASession:
         get_task_timeout: float = 60.0,
         get_task_poll_interval: float = 5.0,
     ) -> None:
-        self.agent_manager = agent_manager
+        self.agents = agents
         self.task_store: TaskStore = task_store or InMemoryTaskStore()
         self.file_store: FileStore | None = file_store
         self._send_message_timeout = send_message_timeout
@@ -155,9 +155,7 @@ class A2ASession:
                 agent_card.capabilities is not None and agent_card.capabilities.streaming
             )
             if supports_streaming:
-                task = await self._get_task_streaming(
-                    agent_card, headers, task.id, remaining
-                )
+                task = await self._get_task_streaming(agent_card, headers, task.id, remaining)
             else:
                 task = await self._get_task_polling(
                     agent_card, headers, task.id, remaining, self._get_task_poll_interval
@@ -348,8 +346,8 @@ class A2ASession:
         Raises:
             ValueError: If agent cannot be resolved.
         """
-        agent = await self.agent_manager.get_agent(agent_id)
+        agent = await self.agents.get_agent(agent_id)
         if agent is None:
-            available = ", ".join(sorted(await self.agent_manager.get_agents()))
+            available = ", ".join(sorted(await self.agents.get_agents()))
             raise ValueError(f"Agent '{agent_id}' not found. Available agents: {available}")
         return agent.agent_card, agent.custom_headers
