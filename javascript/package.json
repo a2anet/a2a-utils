@@ -11,9 +11,7 @@
     },
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
-    "files": [
-        "dist"
-    ],
+    "files": ["dist"],
     "scripts": {
         "build": "tsc",
         "check": "biome check .",
@@ -22,11 +20,7 @@
         "test": "bun test",
         "test:coverage": "bun test --coverage"
     },
-    "keywords": [
-        "a2a",
-        "agent-to-agent",
-        "utilities"
-    ],
+    "keywords": ["a2a", "agent-to-agent", "utilities"],
     "author": "A2A Net <hello@a2anet.com>",
     "license": "Apache-2.0",
     "repository": {
@@ -47,7 +41,5 @@
         "@types/uuid": "^10.0.0",
         "typescript": "^5.7.0"
     },
-    "trustedDependencies": [
-        "@biomejs/biome"
-    ]
+    "trustedDependencies": ["@biomejs/biome"]
 }
