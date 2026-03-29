@@ -25,6 +25,19 @@ Tool outputs are also optimised for LLMs.
 For example, `get_agents` returns a list of agent names and descriptions, whereas `get_agent` also returns an agent's skill names and descriptions.
 `send_message` and `get_task` return LLM-friendly types that are subsets of A2A types (e.g. `TaskForLLM`, `MessageForLLM`, and `ArtifactForLLM`) and automatically minimise large Artifacts, which can be viewed with `view_text_artifact` and `view_data_artifact`.
 
+## ✨ Features
+
+- **6 LLM-friendly tools** — `get_agents`, `get_agent`, `send_message`, `get_task`, `view_text_artifact`, and `view_data_artifact`, designed with clear docstrings, JSON-serialisable outputs, and actionable error messages
+- **Simple message sending** — send messages with just an agent ID and message string; Agent Card fetching, headers, and non-blocking streaming are handled automatically
+- **Multi-turn conversations** — continue conversations across multiple messages using `context_id`
+- **Long-running task support** — if `send_message` times out, use `get_task` to resume streaming until the task reaches a terminal state
+- **Automatic artifact minimization** — large text and data artifacts are automatically minimized for LLM context windows, with `view_text_artifact` and `view_data_artifact` for detailed navigation
+- **Task persistence** — save and load tasks as JSON files with `JSONTaskStore`
+- **File artifact storage** — save file artifacts to the local filesystem with `LocalFileStore`, or implement `FileStore` for custom backends (S3, GCS, etc.)
+- **Agent Card management** — `A2AAgents` stores agent IDs, URLs, and custom headers, with multiple detail levels for LLM summaries (`name`, `basic`, `skills`, `full`)
+- **Runtime agent registration** — add new agents at runtime with `add_agent`
+- **Configurable timeouts and polling** — customisable timeouts for sending messages, monitoring tasks, and polling intervals
+
 ## 📦 Installation
 
 To install with pip:
