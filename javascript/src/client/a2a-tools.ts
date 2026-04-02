@@ -6,12 +6,13 @@
  * Ready-made agent tools for A2A communication.
  */
 
-import type { Artifact, Message, Task } from "@a2a-js/sdk";
+import type { Artifact, FileWithUri, Message, Part, Task } from "@a2a-js/sdk";
 import { DataArtifacts, TextArtifacts, minimizeArtifacts } from "../artifacts/index.js";
 import type {
     ArtifactForLLM,
     DataPartForLLM,
     FilePartForLLM,
+    JsonValue,
     MessageForLLM,
     TaskForLLM,
     TextPartForLLM,
@@ -105,29 +106,34 @@ export class A2ATools {
      *
      * @param agentId - ID of the agent to message (from get_agents).
      * @param message - The message content to send.
-     * @param contextId - Continue an existing conversation by providing its context ID.
+     * @param opts.contextId - Continue an existing conversation by providing its context ID.
      *     Omit to start a new conversation.
-     * @param taskId - Attach to an existing task (for input_required flows).
-     * @param timeout - Override the default timeout in seconds.
+     * @param opts.taskId - Attach to an existing task (for input_required flows).
+     * @param opts.timeout - Override the default timeout in seconds.
+     * @param opts.data - Structured data to include with the message. Each item
+     *     is sent as a separate JSON object or array alongside the text.
+     * @param opts.files - Files to include with the message. Accepts local file
+     *     paths (read and sent as binary, max 1MB) or URLs (sent as references
+     *     for the remote agent to fetch).
      */
     async sendMessage(
         agentId: string,
         message: string,
-        contextId?: string | null,
-        taskId?: string | null,
-        timeout?: number | null,
+        opts?: {
+            contextId?: string | null;
+            taskId?: string | null;
+            timeout?: number | null;
+            data?: JsonValue[];
+            files?: string[];
+        },
     ): Promise<Record<string, unknown>> {
         try {
-            const result = await this.session.sendMessage(agentId, message, {
-                contextId,
-                taskId,
-                timeout,
-            });
+            const result = await this.session.sendMessage(agentId, message, opts);
             let llmResult: TaskForLLM | MessageForLLM;
             if (result.kind === "task") {
                 llmResult = await this.buildTaskForLlm(result as Task);
             } else {
-                llmResult = this.buildMessageForLlm(result as Message);
+                llmResult = await this.buildMessageForLlm(result as Message);
             }
             return llmResult as unknown as Record<string, unknown>;
         } catch (e) {
@@ -322,9 +328,9 @@ export class A2ATools {
      * Convert an A2A Message to MessageForLLM.
      *
      * Combines all TextParts into a single TextPartForLLM.
-     * FileParts are ignored; file handling is done at the artifact level.
+     * Includes FileParts with saved path metadata.
      */
-    private buildMessageForLlm(message: Message): MessageForLLM {
+    private async buildMessageForLlm(message: Message): Promise<MessageForLLM> {
         const parts: (TextPartForLLM | DataPartForLLM | FilePartForLLM)[] = [];
 
         // Combine all text parts
@@ -346,6 +352,19 @@ export class A2ATools {
             }
         }
 
+        // Handle file parts
+        let savedPaths: string[] = [];
+        if (this.session.fileStore !== null) {
+            savedPaths = await this.session.fileStore.getMessage(message.messageId);
+        }
+        const hasSavedPaths = savedPaths.length > 0;
+
+        for (const part of message.parts) {
+            if (part.kind === "file") {
+                parts.push(A2ATools.buildFilePartForLlm(part, hasSavedPaths ? savedPaths : null));
+            }
+        }
+
         return {
             contextId: message.contextId ?? null,
             kind: "message",
@@ -360,7 +379,10 @@ export class A2ATools {
         if (this.session.fileStore !== null && task.artifacts) {
             savedFilePaths = {};
             for (const artifact of task.artifacts) {
-                const paths = await this.session.fileStore.get(task.id, artifact.artifactId);
+                const paths = await this.session.fileStore.getArtifact(
+                    task.id,
+                    artifact.artifactId,
+                );
                 if (paths.length > 0) {
                     savedFilePaths[artifact.artifactId] = paths;
                 }
@@ -380,7 +402,7 @@ export class A2ATools {
         // Build status message
         let statusMessage: MessageForLLM | null = null;
         if (task.status.message) {
-            statusMessage = this.buildMessageForLlm(task.status.message as Message);
+            statusMessage = await this.buildMessageForLlm(task.status.message as Message);
         }
 
         return {
@@ -552,5 +574,48 @@ export class A2ATools {
 
         // Single column name
         return trimmedColumns;
+    }
+
+    /**
+     * Build a FilePartForLLM from a file Part.
+     *
+     * Used by both message and artifact file handling.
+     */
+    private static buildFilePartForLlm(part: Part, savedPaths: string[] | null): FilePartForLLM {
+        if (part.kind !== "file") {
+            throw new Error("Expected file part");
+        }
+
+        const fileObj = part.file;
+        const name = fileObj.name ?? null;
+        const mimeType = fileObj.mimeType ?? null;
+
+        if ("bytes" in fileObj) {
+            if (savedPaths !== null) {
+                return { kind: "file", name, mimeType, uri: null, bytes: { _saved_to: savedPaths } };
+            }
+            return {
+                kind: "file",
+                name,
+                mimeType,
+                uri: null,
+                bytes: { _error: "No FileStore configured. Cannot access file bytes." },
+            };
+        }
+
+        if ("uri" in fileObj) {
+            if (savedPaths !== null) {
+                return { kind: "file", name, mimeType, uri: { _saved_to: savedPaths }, bytes: null };
+            }
+            return {
+                kind: "file",
+                name,
+                mimeType,
+                uri: (fileObj as FileWithUri).uri,
+                bytes: null,
+            };
+        }
+
+        return { kind: "file", name, mimeType, uri: null, bytes: null };
     }
 }

@@ -11,7 +11,9 @@ from a2a.types import (
     FilePart,
     FileWithBytes,
     FileWithUri,
+    Message,
     Part,
+    Role,
     TextPart,
 )
 
@@ -67,6 +69,32 @@ def _make_uri_artifact(
     )
 
 
+def _make_bytes_message(
+    message_id: str = "msg-1",
+    name: str = "report.pdf",
+    mime_type: str = "application/pdf",
+    content: bytes = b"hello world",
+) -> Message:
+    """Create a message with a FileWithBytes part."""
+    encoded = base64.b64encode(content).decode()
+    return Message(
+        message_id=message_id,
+        context_id="ctx-1",
+        role=Role.agent,
+        parts=[
+            Part(
+                root=FilePart(
+                    file=FileWithBytes(
+                        bytes=encoded,
+                        name=name,
+                        mime_type=mime_type,
+                    )
+                )
+            ),
+        ],
+    )
+
+
 class TestLocalFileStore:
     @pytest.mark.asyncio
     async def test_save_bytes_artifact(self, tmp_path: Path) -> None:
@@ -74,7 +102,7 @@ class TestLocalFileStore:
         content = b"PDF content here"
         artifact = _make_bytes_artifact(content=content)
 
-        paths = await store.save("task-1", artifact)
+        paths = await store.save_artifact("task-1", artifact)
 
         assert len(paths) == 1
         saved_path = Path(paths[0])
@@ -96,7 +124,7 @@ class TestLocalFileStore:
             mock_client.get.return_value = mock_response
             mock_client_fn.return_value = mock_client
 
-            paths = await store.save("task-1", artifact)
+            paths = await store.save_artifact("task-1", artifact)
 
         assert len(paths) == 1
         saved_path = Path(paths[0])
@@ -104,46 +132,46 @@ class TestLocalFileStore:
         assert saved_path.read_bytes() == b"image data"
 
     @pytest.mark.asyncio
-    async def test_get_paths(self, tmp_path: Path) -> None:
+    async def test_get_artifact_paths(self, tmp_path: Path) -> None:
         store = LocalFileStore(tmp_path / "files")
         artifact = _make_bytes_artifact()
 
-        await store.save("task-1", artifact)
-        paths = await store.get("task-1", "art-1")
+        await store.save_artifact("task-1", artifact)
+        paths = await store.get_artifact("task-1", "art-1")
 
         assert len(paths) == 1
         assert "report.pdf" in paths[0]
 
     @pytest.mark.asyncio
-    async def test_get_nonexistent(self, tmp_path: Path) -> None:
+    async def test_get_artifact_nonexistent(self, tmp_path: Path) -> None:
         store = LocalFileStore(tmp_path / "files")
-        paths = await store.get("task-1", "nonexistent")
+        paths = await store.get_artifact("task-1", "nonexistent")
         assert paths == []
 
     @pytest.mark.asyncio
-    async def test_delete(self, tmp_path: Path) -> None:
+    async def test_delete_artifact(self, tmp_path: Path) -> None:
         store = LocalFileStore(tmp_path / "files")
         artifact = _make_bytes_artifact()
 
-        await store.save("task-1", artifact)
-        assert (tmp_path / "files" / "task-1" / "art-1").exists()
+        await store.save_artifact("task-1", artifact)
+        assert (tmp_path / "files" / "artifacts" / "task-1" / "art-1").exists()
 
-        await store.delete("task-1", "art-1")
-        assert not (tmp_path / "files" / "task-1" / "art-1").exists()
+        await store.delete_artifact("task-1", "art-1")
+        assert not (tmp_path / "files" / "artifacts" / "task-1" / "art-1").exists()
 
     @pytest.mark.asyncio
-    async def test_delete_nonexistent(self, tmp_path: Path) -> None:
+    async def test_delete_artifact_nonexistent(self, tmp_path: Path) -> None:
         store = LocalFileStore(tmp_path / "files")
         # Should not raise
-        await store.delete("task-1", "nonexistent")
+        await store.delete_artifact("task-1", "nonexistent")
 
     @pytest.mark.asyncio
-    async def test_storage_dir_structure(self, tmp_path: Path) -> None:
+    async def test_artifact_storage_dir_structure(self, tmp_path: Path) -> None:
         store = LocalFileStore(tmp_path / "files")
         artifact = _make_bytes_artifact(artifact_id="art-abc")
-        await store.save("task-xyz", artifact)
+        await store.save_artifact("task-xyz", artifact)
 
-        expected_dir = tmp_path / "files" / "task-xyz" / "art-abc"
+        expected_dir = tmp_path / "files" / "artifacts" / "task-xyz" / "art-abc"
         assert expected_dir.is_dir()
         assert (expected_dir / "report.pdf").exists()
 
@@ -154,8 +182,68 @@ class TestLocalFileStore:
             artifact_id="art-text",
             parts=[Part(root=TextPart(text="hello"))],
         )
-        paths = await store.save("task-1", artifact)
+        paths = await store.save_artifact("task-1", artifact)
         assert paths == []
+
+
+class TestLocalFileStoreMessages:
+    @pytest.mark.asyncio
+    async def test_save_message(self, tmp_path: Path) -> None:
+        store = LocalFileStore(tmp_path / "files")
+        content = b"PDF content here"
+        message = _make_bytes_message(content=content)
+
+        paths = await store.save_message(message)
+
+        assert len(paths) == 1
+        saved_path = Path(paths[0])
+        assert saved_path.exists()
+        assert saved_path.read_bytes() == content
+        assert saved_path.name == "report.pdf"
+
+    @pytest.mark.asyncio
+    async def test_get_message(self, tmp_path: Path) -> None:
+        store = LocalFileStore(tmp_path / "files")
+        message = _make_bytes_message()
+
+        await store.save_message(message)
+        paths = await store.get_message("msg-1")
+
+        assert len(paths) == 1
+        assert "report.pdf" in paths[0]
+
+    @pytest.mark.asyncio
+    async def test_get_message_nonexistent(self, tmp_path: Path) -> None:
+        store = LocalFileStore(tmp_path / "files")
+        paths = await store.get_message("nonexistent")
+        assert paths == []
+
+    @pytest.mark.asyncio
+    async def test_delete_message(self, tmp_path: Path) -> None:
+        store = LocalFileStore(tmp_path / "files")
+        message = _make_bytes_message()
+
+        await store.save_message(message)
+        assert (tmp_path / "files" / "messages" / "msg-1").exists()
+
+        await store.delete_message("msg-1")
+        assert not (tmp_path / "files" / "messages" / "msg-1").exists()
+
+    @pytest.mark.asyncio
+    async def test_delete_message_nonexistent(self, tmp_path: Path) -> None:
+        store = LocalFileStore(tmp_path / "files")
+        # Should not raise
+        await store.delete_message("nonexistent")
+
+    @pytest.mark.asyncio
+    async def test_message_storage_dir_structure(self, tmp_path: Path) -> None:
+        store = LocalFileStore(tmp_path / "files")
+        message = _make_bytes_message(message_id="msg-abc")
+        await store.save_message(message)
+
+        expected_dir = tmp_path / "files" / "messages" / "msg-abc"
+        assert expected_dir.is_dir()
+        assert (expected_dir / "report.pdf").exists()
 
 
 class TestFilePartHandling:

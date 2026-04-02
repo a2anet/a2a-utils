@@ -23,6 +23,7 @@ export type {
     ArtifactForLLM,
     DataPartForLLM,
     FilePartForLLM,
+    JsonValue,
     MessageForLLM,
     TaskForLLM,
     TaskStatusForLLM,

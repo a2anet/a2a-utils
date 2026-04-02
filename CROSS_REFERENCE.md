@@ -39,6 +39,7 @@ The root package exports are intentionally aligned.
 | `minimize_artifacts` | `minimizeArtifacts` |
 | `FileStore` | `FileStore` |
 | `LocalFileStore` | `LocalFileStore` |
+| `JsonValue` | `JsonValue` |
 | `TERMINAL_OR_ACTIONABLE_STATES` | `TERMINAL_OR_ACTIONABLE_STATES` |
 | `AgentURLAndCustomHeaders` | `AgentURLAndCustomHeaders` |
 | `ArtifactSettings` | `ArtifactSettings` |
@@ -84,9 +85,14 @@ These are expected and should not be treated as parity bugs by themselves.
 
 - `A2ASession` should expose the same user-facing flow in both packages:
   send a message, continue by `context_id` or `contextId`, persist tasks, optionally persist files, and monitor unfinished tasks until terminal or actionable states.
+- `A2ASession` file persistence should stay aligned in both packages:
+  artifact file parts are stored through the `FileStore`, and file parts returned in task `status.message`, task `history`, or direct message responses should also be persisted when a `FileStore` is configured.
 - `A2ATools` should keep the same six user-facing tool methods:
   `getAgents`, `getAgent`, `sendMessage`, `getTask`, `viewTextArtifact`, and `viewDataArtifact` in JavaScript;
   `get_agents`, `get_agent`, `send_message`, `get_task`, `view_text_artifact`, and `view_data_artifact` in Python.
+- `FileStore` should remain behaviorally aligned in both packages:
+  artifact methods are `save_artifact`/`get_artifact`/`delete_artifact` in Python and `saveArtifact`/`getArtifact`/`deleteArtifact` in JavaScript;
+  message methods are `save_message`/`get_message`/`delete_message` in Python and `saveMessage`/`getMessage`/`deleteMessage` in JavaScript.
 - Artifact minimization should stay behaviorally aligned even when helper structure differs.
 - Metadata keys emitted for minimized artifacts should remain `snake_case` in both packages for compatibility.
 - LLM-facing object fields exposed from the JavaScript package may remain idiomatic to the JS SDK, for example `contextId`, `artifactId`, and `mimeType`.

@@ -1,10 +1,21 @@
 """Tests for a2a_utils.client.a2a_session."""
 
+import base64
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from a2a.server.tasks import InMemoryTaskStore, TaskStore
+from a2a.types import (
+    FilePart,
+    FileWithBytes,
+    Message,
+    Part,
+    Role,
+    Task,
+    TaskState,
+    TaskStatus,
+)
 
 from a2a_utils.artifacts import TextArtifacts
 from a2a_utils.client.a2a_session import A2ASession
@@ -77,6 +88,71 @@ class TestGetTaskValidation:
         session = A2ASession(agents=manager)
         with pytest.raises(ValueError, match="not found"):
             await session.get_task("nonexistent", "task-123")
+
+
+def _make_file_message(message_id: str) -> Message:
+    encoded = base64.b64encode(b"file payload").decode()
+    return Message(
+        message_id=message_id,
+        context_id="ctx-1",
+        role=Role.agent,
+        parts=[
+            Part(
+                root=FilePart(
+                    file=FileWithBytes(
+                        bytes=encoded,
+                        name="report.pdf",
+                        mime_type="application/pdf",
+                    )
+                )
+            )
+        ],
+    )
+
+
+class TestSaveTaskFiles:
+    @pytest.mark.asyncio
+    async def test_saves_status_message_files_without_artifacts(self) -> None:
+        manager = A2AAgents(None)
+        file_store = MagicMock()
+        file_store.get_message = AsyncMock(return_value=[])
+        file_store.save_message = AsyncMock(return_value=["/tmp/report.pdf"])
+        session = A2ASession(agents=manager, file_store=file_store)
+
+        task = Task(
+            id="task-1",
+            context_id="ctx-1",
+            status=TaskStatus(state=TaskState.completed, message=_make_file_message("msg-status")),
+            artifacts=[],
+            history=None,
+        )
+
+        await session._save_task_files(task)
+
+        file_store.get_message.assert_awaited_once_with("msg-status")
+        file_store.save_message.assert_awaited_once_with(task.status.message)
+
+    @pytest.mark.asyncio
+    async def test_saves_history_message_files_without_artifacts(self) -> None:
+        manager = A2AAgents(None)
+        file_store = MagicMock()
+        file_store.get_message = AsyncMock(return_value=[])
+        file_store.save_message = AsyncMock(return_value=["/tmp/report.pdf"])
+        session = A2ASession(agents=manager, file_store=file_store)
+
+        history_message = _make_file_message("msg-history")
+        task = Task(
+            id="task-1",
+            context_id="ctx-1",
+            status=TaskStatus(state=TaskState.completed, message=None),
+            artifacts=[],
+            history=[history_message],
+        )
+
+        await session._save_task_files(task)
+
+        file_store.get_message.assert_awaited_once_with("msg-history")
+        file_store.save_message.assert_awaited_once_with(history_message)
 
 
 class TestTextArtifactsView:

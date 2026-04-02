@@ -6,10 +6,13 @@
  * A2ASession — main interface for interacting with A2A agents.
  */
 
+import * as fsSync from "node:fs/promises";
+import * as path from "node:path";
 import type {
     AgentCard,
     GetTaskResponse,
     Message,
+    Part,
     SendMessageResponse,
     Task,
     TaskIdParams,
@@ -20,6 +23,7 @@ import { InMemoryTaskStore, type TaskStore } from "@a2a-js/sdk/server";
 import { v4 as uuidv4 } from "uuid";
 import type { FileStore } from "../files/file-store.js";
 import { TERMINAL_OR_ACTIONABLE_STATES } from "../types.js";
+import type { JsonValue } from "../types.js";
 import type { A2AAgents } from "./a2a-agents.js";
 
 function sleep(seconds: number): Promise<void> {
@@ -45,6 +49,37 @@ type SessionClient = A2AClient & {
 
 /** Main interface for sending messages to A2A agents. */
 export class A2ASession {
+    /** Maximum file size for local file uploads (1MB). */
+    private static readonly MAX_FILE_SIZE = 1_048_576;
+
+    /** Common MIME types by extension. */
+    private static readonly MIME_TYPES: Record<string, string> = {
+        ".pdf": "application/pdf",
+        ".json": "application/json",
+        ".xml": "application/xml",
+        ".zip": "application/zip",
+        ".gz": "application/gzip",
+        ".tar": "application/x-tar",
+        ".csv": "text/csv",
+        ".txt": "text/plain",
+        ".html": "text/html",
+        ".css": "text/css",
+        ".js": "text/javascript",
+        ".ts": "text/typescript",
+        ".md": "text/markdown",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml",
+        ".ico": "image/x-icon",
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+    };
+
     readonly agents: A2AAgents;
     readonly taskStore: TaskStore;
     readonly fileStore: FileStore | null;
@@ -80,6 +115,11 @@ export class A2ASession {
      * @param opts.taskId - Optional task ID to attach to the message.
      * @param opts.timeout - HTTP timeout in seconds. Defaults to sendMessageTimeout
      *     from constructor.
+     * @param opts.data - Structured data to include with the message. Each item
+     *     is sent as a separate JSON object or array alongside the text.
+     * @param opts.files - Files to include with the message. Accepts local file
+     *     paths (read and sent as binary, max 1MB) or URLs (sent as references
+     *     for the remote agent to fetch).
      *
      * @returns Task for task responses, Message for message-only responses.
      *
@@ -92,17 +132,36 @@ export class A2ASession {
             contextId?: string | null;
             taskId?: string | null;
             timeout?: number | null;
+            data?: JsonValue[];
+            files?: string[];
         },
     ): Promise<Task | Message> {
         const [agentCard, headers] = await this.resolveAgent(agentId);
 
         const contextId = opts?.contextId ?? uuidv4();
 
+        // Build message parts
+        const parts: Part[] = [{ kind: "text", text: message }];
+
+        // Add data parts
+        if (opts?.data) {
+            for (const d of opts.data) {
+                parts.push({ kind: "data", data: d as { [k: string]: unknown } });
+            }
+        }
+
+        // Add file parts
+        if (opts?.files) {
+            for (const fileRef of opts.files) {
+                parts.push(await this.buildFilePart(fileRef));
+            }
+        }
+
         // Build A2A message
         const a2aMessage: Message = {
             kind: "message",
             messageId: uuidv4(),
-            parts: [{ kind: "text", text: message }],
+            parts,
             role: "user",
             contextId,
         };
@@ -137,7 +196,9 @@ export class A2ASession {
 
         // Handle Message result
         if (result.kind === "message") {
-            return result as unknown as Message;
+            const msg = result as unknown as Message;
+            await this.saveMessageFiles(msg);
+            return msg;
         }
 
         // Handle Task result
@@ -150,7 +211,7 @@ export class A2ASession {
 
         // If task is already in a terminal/actionable state, save files and return
         if (TERMINAL_OR_ACTIONABLE_STATES.has(task.status.state)) {
-            await this.saveFiles(task);
+            await this.saveTaskFiles(task);
             return task;
         }
 
@@ -177,7 +238,7 @@ export class A2ASession {
             await this.taskStore.save(task);
         }
 
-        await this.saveFiles(task);
+        await this.saveTaskFiles(task);
         return task;
     }
 
@@ -240,29 +301,103 @@ export class A2ASession {
         }
 
         await this.taskStore.save(task);
-        await this.saveFiles(task);
+        await this.saveTaskFiles(task);
         return task;
     }
 
     /**
-     * Save file artifacts to the file store if configured.
+     * Save file artifacts from a task to the file store if configured.
      *
      * Idempotent: skips artifacts whose files have already been saved.
+     * Also saves files from the task's status message if present.
      */
-    private async saveFiles(task: Task): Promise<void> {
-        if (this.fileStore === null || !task.artifacts) {
+    private async saveTaskFiles(task: Task): Promise<void> {
+        if (this.fileStore === null) {
             return;
         }
 
-        for (const artifact of task.artifacts) {
-            const hasFiles = artifact.parts.some((p) => p.kind === "file");
-            if (hasFiles) {
-                const existing = await this.fileStore.get(task.id, artifact.artifactId);
-                if (existing.length === 0) {
-                    await this.fileStore.save(task.id, artifact);
+        // Save artifact files
+        if (task.artifacts) {
+            for (const artifact of task.artifacts) {
+                const hasFiles = artifact.parts.some((p) => p.kind === "file");
+                if (hasFiles) {
+                    const existing = await this.fileStore.getArtifact(task.id, artifact.artifactId);
+                    if (existing.length === 0) {
+                        await this.fileStore.saveArtifact(task.id, artifact);
+                    }
                 }
             }
         }
+
+        // Save files from the status message
+        if (task.status.message) {
+            await this.saveMessageFiles(task.status.message as Message);
+        }
+
+        // Save files from history messages
+        if (task.history) {
+            for (const message of task.history) {
+                await this.saveMessageFiles(message as Message);
+            }
+        }
+    }
+
+    /**
+     * Save file parts from a message to the file store if configured.
+     *
+     * Idempotent: skips messages whose files have already been saved.
+     */
+    private async saveMessageFiles(message: Message): Promise<void> {
+        if (this.fileStore === null) {
+            return;
+        }
+        const hasFiles = message.parts.some((p) => p.kind === "file");
+        if (hasFiles) {
+            const existing = await this.fileStore.getMessage(message.messageId);
+            if (existing.length === 0) {
+                await this.fileStore.saveMessage(message);
+            }
+        }
+    }
+
+    /**
+     * Build a file Part from a file path or URL.
+     *
+     * Local paths are read and encoded as FileWithBytes (max 1MB).
+     * URLs are passed through as FileWithUri.
+     */
+    private async buildFilePart(fileRef: string): Promise<Part> {
+        if (A2ASession.isUrl(fileRef)) {
+            return {
+                kind: "file",
+                file: { uri: fileRef },
+            } as Part;
+        }
+
+        const content = await fsSync.readFile(fileRef);
+        if (content.length > A2ASession.MAX_FILE_SIZE) {
+            const sizeMb = (content.length / 1_048_576).toFixed(1);
+            throw new Error(
+                `File '${fileRef}' is ${sizeMb}MB. Maximum size for file uploads is 1MB.`,
+            );
+        }
+        const name = path.basename(fileRef);
+        const mimeType = A2ASession.getMimeType(name);
+        return {
+            kind: "file",
+            file: { name, mimeType, bytes: content.toString("base64") },
+        } as Part;
+    }
+
+    /** Get MIME type from filename extension. */
+    private static getMimeType(filename: string): string {
+        const ext = path.extname(filename).toLowerCase();
+        return A2ASession.MIME_TYPES[ext] ?? "application/octet-stream";
+    }
+
+    /** Check if a string is an HTTP/HTTPS URL. */
+    private static isUrl(value: string): boolean {
+        return value.startsWith("http://") || value.startsWith("https://");
     }
 
     /** Monitor a task via SSE resubscription, falling back to a final fetch. */

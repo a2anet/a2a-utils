@@ -71,7 +71,7 @@ describe("LocalFileStore", () => {
         const content = new TextEncoder().encode("PDF content here");
         const artifact = makeBytesArtifact({ content });
 
-        const paths = await store.save("task-1", artifact);
+        const paths = await store.saveArtifact("task-1", artifact);
 
         expect(paths.length).toBe(1);
         expect(fs.existsSync(paths[0])).toBe(true);
@@ -83,8 +83,8 @@ describe("LocalFileStore", () => {
         const store = new LocalFileStore(path.join(tmpDir, "files"));
         const artifact = makeBytesArtifact();
 
-        await store.save("task-1", artifact);
-        const paths = await store.get("task-1", "art-1");
+        await store.saveArtifact("task-1", artifact);
+        const paths = await store.getArtifact("task-1", "art-1");
 
         expect(paths.length).toBe(1);
         expect(paths[0]).toContain("report.pdf");
@@ -92,7 +92,7 @@ describe("LocalFileStore", () => {
 
     test("get nonexistent", async () => {
         const store = new LocalFileStore(path.join(tmpDir, "files"));
-        const paths = await store.get("task-1", "nonexistent");
+        const paths = await store.getArtifact("task-1", "nonexistent");
         expect(paths).toEqual([]);
     });
 
@@ -100,26 +100,26 @@ describe("LocalFileStore", () => {
         const store = new LocalFileStore(path.join(tmpDir, "files"));
         const artifact = makeBytesArtifact();
 
-        await store.save("task-1", artifact);
-        const artifactDir = path.join(tmpDir, "files", "task-1", "art-1");
+        await store.saveArtifact("task-1", artifact);
+        const artifactDir = path.join(tmpDir, "files", "artifacts", "task-1", "art-1");
         expect(fs.existsSync(artifactDir)).toBe(true);
 
-        await store.delete("task-1", "art-1");
+        await store.deleteArtifact("task-1", "art-1");
         expect(fs.existsSync(artifactDir)).toBe(false);
     });
 
     test("delete nonexistent", async () => {
         const store = new LocalFileStore(path.join(tmpDir, "files"));
         // Should not throw
-        await store.delete("task-1", "nonexistent");
+        await store.deleteArtifact("task-1", "nonexistent");
     });
 
     test("storage dir structure", async () => {
         const store = new LocalFileStore(path.join(tmpDir, "files"));
         const artifact = makeBytesArtifact({ artifactId: "art-abc" });
-        await store.save("task-xyz", artifact);
+        await store.saveArtifact("task-xyz", artifact);
 
-        const expectedDir = path.join(tmpDir, "files", "task-xyz", "art-abc");
+        const expectedDir = path.join(tmpDir, "files", "artifacts", "task-xyz", "art-abc");
         expect(fs.statSync(expectedDir).isDirectory()).toBe(true);
         expect(fs.existsSync(path.join(expectedDir, "report.pdf"))).toBe(true);
     });
@@ -130,7 +130,7 @@ describe("LocalFileStore", () => {
             artifactId: "art-text",
             parts: [{ kind: "text", text: "hello" }],
         };
-        const paths = await store.save("task-1", artifact);
+        const paths = await store.saveArtifact("task-1", artifact);
         expect(paths).toEqual([]);
     });
 });

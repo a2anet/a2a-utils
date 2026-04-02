@@ -20,6 +20,7 @@ from a2a_utils.types import (
     ArtifactSettings,
     DataPartForLLM,
     FilePartForLLM,
+    JsonValue,
     MessageForLLM,
     TaskForLLM,
     TaskStatusForLLM,
@@ -41,6 +42,7 @@ __all__ = [
     "FileStore",
     "LocalFileStore",
     # types
+    "JsonValue",
     "TERMINAL_OR_ACTIONABLE_STATES",
     "AgentURLAndCustomHeaders",
     "ArtifactForLLM",

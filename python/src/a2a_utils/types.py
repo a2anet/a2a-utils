@@ -1,7 +1,7 @@
 """Typed dataclasses for LLM-facing A2A responses."""
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeAlias
 
 from a2a.types import AgentCard, TaskState
 
@@ -11,6 +11,10 @@ class AgentURLAndCustomHeaders:
     agent_card: AgentCard
     custom_headers: dict[str, str] = field(default_factory=dict)
 
+
+JsonValue: TypeAlias = (
+    str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+)
 
 TERMINAL_OR_ACTIONABLE_STATES = frozenset(
     {

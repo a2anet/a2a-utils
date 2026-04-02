@@ -1,0 +1,18 @@
+# A2A Utils
+
+Add high-level coding guidelines and review notes to this file. Specific actionable items from code reviews should be captured here for both Python and JavaScript implementations.
+
+## Workflow
+
+- Check with the user before creating a commit.
+- When proposing or writing commit messages, use backticks around code objects and use their full names, for example `FilePart`s and `A2ASession`.
+- Commit messages should be specific about the actual changes, not generic summaries.
+- Include a detailed bullet list in the commit body covering the main changes, including important related changes not explicitly discussed in chat.
+
+## Engineering Guidelines
+
+- Constants and utility functions should be kept in a constants or utility file if used by more than one class. Otherwise they should be in the class.
+
+## A2A Utils Specifics
+
+- All changes should be made for both Python and JavaScript.

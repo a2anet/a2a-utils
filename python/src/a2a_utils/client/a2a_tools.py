@@ -7,6 +7,9 @@ from typing import Any, cast
 from a2a.types import (
     Artifact,
     DataPart,
+    FilePart,
+    FileWithBytes,
+    FileWithUri,
     Message,
     Task,
     TextPart,
@@ -18,6 +21,7 @@ from ..types import (
     ArtifactSettings,
     DataPartForLLM,
     FilePartForLLM,
+    JsonValue,
     MessageForLLM,
     TaskForLLM,
     TaskStatusForLLM,
@@ -98,9 +102,12 @@ class A2ATools:
         self,
         agent_id: str,
         message: str,
+        *,
         context_id: str | None = None,
         task_id: str | None = None,
         timeout: float | None = None,
+        data: list[JsonValue] | None = None,
+        files: list[str] | None = None,
     ) -> dict[str, Any]:
         """Send a message to an agent and receive a structured response.
 
@@ -121,6 +128,11 @@ class A2ATools:
                 Omit to start a new conversation.
             task_id: Attach to an existing task (for input_required flows).
             timeout: Override the default timeout in seconds.
+            data: Structured data to include with the message. Each item
+                is sent as a separate JSON object or array alongside the text.
+            files: Files to include with the message. Accepts local file paths
+                (read and sent as binary, max 1MB) or URLs (sent as references
+                for the remote agent to fetch).
         """
         try:
             result = await self._session.send_message(
@@ -129,6 +141,8 @@ class A2ATools:
                 context_id=context_id,
                 task_id=task_id,
                 timeout=timeout,
+                data=data,
+                files=files,
             )
             llm_result: TaskForLLM | MessageForLLM
             if isinstance(result, Task):
@@ -334,7 +348,7 @@ class A2ATools:
         """Convert an A2A Message to MessageForLLM.
 
         Combines all TextParts into a single TextPartForLLM.
-        FileParts are ignored; file handling is done at the artifact level.
+        Each DataPart stays separate. FileParts include saved path info.
         """
         parts: list[TextPartForLLM | DataPartForLLM | FilePartForLLM] = []
 
@@ -352,6 +366,20 @@ class A2ATools:
             if isinstance(part.root, DataPart):
                 parts.append(DataPartForLLM(kind="data", data=part.root.data))
 
+        # Handle file parts
+        saved_paths: list[str] = []
+        if self._session.file_store is not None:
+            saved_paths = await self._session.file_store.get_message(message.message_id)
+        has_saved_paths = len(saved_paths) > 0
+
+        for part in message.parts:
+            if isinstance(part.root, FilePart):
+                parts.append(
+                    A2ATools._build_file_part_for_llm(
+                        part.root, saved_paths if has_saved_paths else None
+                    )
+                )
+
         return MessageForLLM(
             context_id=message.context_id,
             kind="message",
@@ -365,7 +393,9 @@ class A2ATools:
         if self._session.file_store is not None and task.artifacts:
             saved_file_paths = {}
             for artifact in task.artifacts:
-                paths = await self._session.file_store.get(task.id, artifact.artifact_id)
+                paths = await self._session.file_store.get_artifact(
+                    task.id, artifact.artifact_id
+                )
                 if paths:
                     saved_file_paths[artifact.artifact_id] = paths
 
@@ -545,3 +575,48 @@ class A2ATools:
 
         # Single column name
         return columns
+
+    @staticmethod
+    def _build_file_part_for_llm(
+        file_part: FilePart, saved_paths: list[str] | None
+    ) -> FilePartForLLM:
+        """Convert a FilePart to a FilePartForLLM with saved path info."""
+        file_obj = file_part.file
+        name = file_obj.name if file_obj.name else None
+        mime_type = (
+            file_obj.mime_type
+            if hasattr(file_obj, "mime_type") and file_obj.mime_type
+            else None
+        )
+
+        if isinstance(file_obj, FileWithBytes):
+            if saved_paths is not None:
+                return FilePartForLLM(
+                    kind="file",
+                    name=name,
+                    mime_type=mime_type,
+                    uri=None,
+                    bytes={"_saved_to": saved_paths},
+                )
+            return FilePartForLLM(
+                kind="file",
+                name=name,
+                mime_type=mime_type,
+                uri=None,
+                bytes={"_error": "No FileStore configured. Cannot access file bytes."},
+            )
+
+        if isinstance(file_obj, FileWithUri):
+            if saved_paths is not None:
+                return FilePartForLLM(
+                    kind="file",
+                    name=name,
+                    mime_type=mime_type,
+                    uri={"_saved_to": saved_paths},
+                    bytes=None,
+                )
+            return FilePartForLLM(
+                kind="file", name=name, mime_type=mime_type, uri=file_obj.uri, bytes=None
+            )
+
+        return FilePartForLLM(kind="file", name=name, mime_type=mime_type, uri=None, bytes=None)

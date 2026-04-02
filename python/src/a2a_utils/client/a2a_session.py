@@ -1,8 +1,10 @@
 """A2ASession — main interface for interacting with A2A agents."""
 
 import asyncio
+import base64
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -11,7 +13,10 @@ from a2a.client.errors import A2AClientJSONRPCError
 from a2a.server.tasks import InMemoryTaskStore, TaskStore
 from a2a.types import (
     AgentCard,
+    DataPart,
     FilePart,
+    FileWithBytes,
+    FileWithUri,
     GetTaskRequest,
     GetTaskSuccessResponse,
     JSONRPCErrorResponse,
@@ -33,12 +38,50 @@ from a2a.types import (
 from loguru import logger
 
 from ..files import FileStore
-from ..types import TERMINAL_OR_ACTIONABLE_STATES
+from ..types import TERMINAL_OR_ACTIONABLE_STATES, JsonValue
 from .a2a_agents import A2AAgents
 
 
 class A2ASession:
     """Main interface for sending messages to A2A agents."""
+
+    _MAX_FILE_SIZE = 1_048_576  # 1MB
+
+    _MIME_TYPES: dict[str, str] = {
+        ".txt": "text/plain",
+        ".html": "text/html",
+        ".htm": "text/html",
+        ".css": "text/css",
+        ".js": "application/javascript",
+        ".json": "application/json",
+        ".xml": "application/xml",
+        ".csv": "text/csv",
+        ".md": "text/markdown",
+        ".pdf": "application/pdf",
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".svg": "image/svg+xml",
+        ".webp": "image/webp",
+        ".ico": "image/x-icon",
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+        ".zip": "application/zip",
+        ".gz": "application/gzip",
+        ".tar": "application/x-tar",
+        ".doc": "application/msword",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".xls": "application/vnd.ms-excel",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".ppt": "application/vnd.ms-powerpoint",
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".yaml": "application/x-yaml",
+        ".yml": "application/x-yaml",
+        ".wasm": "application/wasm",
+    }
 
     def __init__(
         self,
@@ -65,6 +108,8 @@ class A2ASession:
         context_id: str | None = None,
         task_id: str | None = None,
         timeout: float | None = None,
+        data: list[JsonValue] | None = None,
+        files: list[str] | None = None,
     ) -> Task | Message:
         """Send a message to an A2A agent.
 
@@ -76,6 +121,11 @@ class A2ASession:
             task_id: Optional task ID to attach to the message.
             timeout: HTTP timeout in seconds. Defaults to ``send_message_timeout``
                 from ``__init__``.
+            data: Structured data to include with the message. Each item
+                is sent as a separate JSON object or array alongside the text.
+            files: Files to include with the message. Accepts local file paths
+                (read and sent as binary, max 1MB) or URLs (sent as references
+                for the remote agent to fetch).
 
         Returns:
             Task for task responses, Message for message-only responses.
@@ -89,11 +139,23 @@ class A2ASession:
         if context_id is None:
             context_id = str(uuid.uuid4())
 
-        # Build A2A message
+        # Build A2A message parts
+        parts: list[Part] = [Part(root=TextPart(text=message))]
+
+        # Add data parts
+        if data:
+            for d in data:
+                parts.append(Part(root=DataPart(data=d)))
+
+        # Add file parts
+        if files:
+            for file_ref in files:
+                parts.append(Part(root=await self._build_file_part(file_ref)))
+
         a2a_message = Message(
             context_id=context_id,
             message_id=str(uuid.uuid4()),
-            parts=[Part(root=TextPart(text=message))],
+            parts=parts,
             role=Role.user,
         )
 
@@ -133,6 +195,7 @@ class A2ASession:
 
         # Handle Message result
         if isinstance(result, Message):
+            await self._save_message_files(result)
             return result
 
         # Handle Task result
@@ -144,7 +207,7 @@ class A2ASession:
 
         # If task is already in a terminal/actionable state, save files and return
         if task.status.state in TERMINAL_OR_ACTIONABLE_STATES:
-            await self._save_files(task)
+            await self._save_task_files(task)
             return task
 
         # Task is in a non-terminal state (e.g. working) — monitor with remaining time
@@ -162,7 +225,7 @@ class A2ASession:
                 )
             await self.task_store.save(task)
 
-        await self._save_files(task)
+        await self._save_task_files(task)
         return task
 
     async def get_task(
@@ -216,23 +279,69 @@ class A2ASession:
             )
 
         await self.task_store.save(task)
-        await self._save_files(task)
+        await self._save_task_files(task)
         return task
 
-    async def _save_files(self, task: Task) -> None:
+    async def _build_file_part(self, file_ref: str) -> FilePart:
+        """Build a FilePart from a file path or URL."""
+        if file_ref.startswith("http://") or file_ref.startswith("https://"):
+            return FilePart(file=FileWithUri(uri=file_ref))
+
+        file_path = Path(file_ref)
+        content = file_path.read_bytes()
+        if len(content) > A2ASession._MAX_FILE_SIZE:
+            size_mb = len(content) / A2ASession._MAX_FILE_SIZE
+            raise ValueError(
+                f"File '{file_ref}' is {size_mb:.1f}MB. Maximum size for file uploads is 1MB."
+            )
+        name = file_path.name
+        mime_type = A2ASession._get_mime_type(name)
+        encoded = base64.b64encode(content).decode()
+        return FilePart(file=FileWithBytes(name=name, mime_type=mime_type, bytes=encoded))
+
+    @staticmethod
+    def _get_mime_type(filename: str) -> str:
+        """Return a MIME type for the given filename based on its extension."""
+        ext = Path(filename).suffix.lower()
+        return A2ASession._MIME_TYPES.get(ext, "application/octet-stream")
+
+    async def _save_task_files(self, task: Task) -> None:
         """Save file artifacts to the file store if configured.
 
         Idempotent: skips artifacts whose files have already been saved.
         """
-        if self.file_store is None or not task.artifacts:
+        if self.file_store is None:
             return
 
-        for artifact in task.artifacts:
-            has_files = any(isinstance(p.root, FilePart) for p in artifact.parts)
-            if has_files:
-                existing = await self.file_store.get(task.id, artifact.artifact_id)
-                if not existing:
-                    await self.file_store.save(task.id, artifact)
+        if task.artifacts:
+            for artifact in task.artifacts:
+                has_files = any(isinstance(p.root, FilePart) for p in artifact.parts)
+                if has_files:
+                    existing = await self.file_store.get_artifact(task.id, artifact.artifact_id)
+                    if not existing:
+                        await self.file_store.save_artifact(task.id, artifact)
+
+        # Also save files from the status message
+        if task.status.message:
+            await self._save_message_files(task.status.message)
+
+        # Save files from history messages
+        if task.history:
+            for message in task.history:
+                await self._save_message_files(message)
+
+    async def _save_message_files(self, message: Message) -> None:
+        """Save file parts from a message to the file store if configured.
+
+        Idempotent: skips messages whose files have already been saved.
+        """
+        if self.file_store is None:
+            return
+        has_files = any(isinstance(p.root, FilePart) for p in message.parts)
+        if has_files:
+            existing = await self.file_store.get_message(message.message_id)
+            if not existing:
+                await self.file_store.save_message(message)
 
     async def _get_task_streaming(
         self,
