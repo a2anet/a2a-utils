@@ -31,10 +31,7 @@ export type A2AToolsInternals = A2ATools & {
     getArtifact(agentId: string, taskId: string, artifactId: string): Promise<Artifact>;
 };
 
-export type A2AToolsStatics = {
-    parseRows(rows: string | null): number | number[] | string | null;
-    parseColumns(columns: string | null): string | string[] | null;
-};
+export type A2AToolsStatics = typeof import("../src/client/a2a-tools.js").A2ATools;
 
 export type DataArtifactsStatics = {
     evaluateJsonPath(data: unknown, path: string): unknown;

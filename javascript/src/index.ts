@@ -7,6 +7,7 @@ export const VERSION = "0.5.0"; // x-release-please-version
 // Core
 export { A2ASession } from "./client/a2a-session.js";
 export { A2ATools } from "./client/a2a-tools.js";
+export type { A2AToolDefinition } from "./client/a2a-tools.js";
 export { A2AAgents } from "./client/a2a-agents.js";
 export { JSONTaskStore } from "./tasks/json-task-store.js";
 

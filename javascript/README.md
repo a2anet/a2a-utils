@@ -58,9 +58,11 @@ Create an `A2ASession`, then `A2ATools` to get LLM-friendly tools that can be us
 
 ```typescript
 import { A2ATools, A2ASession, A2AAgents, JSONTaskStore, LocalFileStore } from "@a2anet/a2a-utils";
+import { createAgent, tool } from "langchain";
+import { ChatOpenAI } from "@langchain/openai";
 
 const agents = new A2AAgents({
-    "weather": { url: "https://weather.example.com/.well-known/agent-card.json" },
+    weather: { url: "https://weather.example.com/.well-known/agent-card.json" },
     "research-bot": {
         url: "https://research.example.com/.well-known/agent-card.json",
         custom_headers: { "X-API-Key": "key_123" },
@@ -74,14 +76,20 @@ const a2aSession = new A2ASession(agents, {
 
 const a2aTools = new A2ATools(a2aSession);
 
-// Pass a2aTools into your agent framework of choice.
+const langchainTools = a2aTools.toolDefinitions.map((def) =>
+    tool(def.execute, { name: def.name, description: def.description, schema: def.schema }),
+);
+
+const model = new ChatOpenAI({ model: "gpt-5.1", reasoning: { effort: "medium" } });
+
+const agent = createAgent({ model, tools: langchainTools });
 ```
 
 ## 📖 API Reference
 
 ### A2ATools
 
-Ready-made tools for agents to communicate with A2A servers. Every method has LLM-friendly docstrings, returns JSON-serialisable objects, and returns actionable error messages.
+Ready-made tools for agents to communicate with A2A servers. Each tool is an instance property with `name`, `description`, `schema` (Zod), and `execute`. Use the `toolDefinitions` getter for the full array.
 
 ```typescript
 import { A2ATools, A2ASession, A2AAgents } from "@a2anet/a2a-utils";
@@ -89,10 +97,10 @@ import { A2ATools, A2ASession, A2AAgents } from "@a2anet/a2a-utils";
 const tools = new A2ATools(session);
 ```
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `session` | `A2ASession` | Yes | The session instance for sending messages and managing agents |
-| `artifactSettings` | `ArtifactSettings \| null` | No | Minimization/view settings (default: `new ArtifactSettings()`) |
+| Parameter          | Type                       | Required | Description                                                    |
+| ------------------ | -------------------------- | -------- | -------------------------------------------------------------- |
+| `session`          | `A2ASession`               | Yes      | The session instance for sending messages and managing agents  |
+| `artifactSettings` | `ArtifactSettings \| null` | No       | Minimization/view settings (default: `new ArtifactSettings()`) |
 
 `artifactSettings` determines how Artifacts are minimized and viewed:
 
@@ -107,78 +115,81 @@ const settings = new ArtifactSettings({
 const tools = new A2ATools(session, { artifactSettings: settings });
 ```
 
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `sendMessageCharacterLimit` | `number` | `50,000` | Character limit above which artifacts are minimized in `sendMessage` |
-| `minimizedObjectStringLength` | `number` | `5,000` | Max length for individual string values within minimized data objects |
-| `viewArtifactCharacterLimit` | `number` | `50,000` | Character limit for output from `viewTextArtifact` / `viewDataArtifact` |
+| Field                         | Type     | Default  | Description                                                             |
+| ----------------------------- | -------- | -------- | ----------------------------------------------------------------------- |
+| `sendMessageCharacterLimit`   | `number` | `50,000` | Character limit above which artifacts are minimized in `sendMessage`    |
+| `minimizedObjectStringLength` | `number` | `5,000`  | Max length for individual string values within minimized data objects   |
+| `viewArtifactCharacterLimit`  | `number` | `50,000` | Character limit for output from `viewTextArtifact` / `viewDataArtifact` |
 
-#### `async getAgents(): Promise<Record<string, unknown>>`
+#### `getAgents`
 
 List all available agents with their names and descriptions.
 
 ```typescript
-const result = await tools.getAgents();
+const result = await tools.getAgents.execute({});
 ```
 
 Example result:
 
 ```json
 {
-  "research-bot": {
-    "name": "Research Bot",
-    "description": "Find and summarize research papers"
-  },
-  "weather": {
-    "name": "Weather Agent",
-    "description": "Get weather forecasts for any location"
-  }
+    "research-bot": {
+        "name": "Research Bot",
+        "description": "Find and summarize research papers"
+    },
+    "weather": {
+        "name": "Weather Agent",
+        "description": "Get weather forecasts for any location"
+    }
 }
 ```
 
-#### `async getAgent(agentId: string): Promise<Record<string, unknown>>`
+#### `getAgent`
 
 Get detailed information about a specific agent, including its skills.
 
 ```typescript
-const result = await tools.getAgent("research-bot");
+const result = await tools.getAgent.execute({ agentId: "research-bot" });
 ```
 
 Example result:
 
 ```json
 {
-  "name": "Research Bot",
-  "description": "Find and summarize research papers",
-  "skills": [
-    {
-      "name": "Search Papers",
-      "description": "Search for papers by topic, author, or keyword"
-    },
-    {
-      "name": "Summarize Paper",
-      "description": "Generate a summary of a specific paper"
-    }
-  ]
+    "name": "Research Bot",
+    "description": "Find and summarize research papers",
+    "skills": [
+        {
+            "name": "Search Papers",
+            "description": "Search for papers by topic, author, or keyword"
+        },
+        {
+            "name": "Summarize Paper",
+            "description": "Generate a summary of a specific paper"
+        }
+    ]
 }
 ```
 
-#### `async sendMessage(agentId, message, contextId?, taskId?, timeout?): Promise<Record<string, unknown>>`
+#### `sendMessage`
 
 Send a message to an agent and receive a structured response. The response includes the agent's reply and any generated Artifacts. Artifacts are automatically minimized to fit the context window.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `agentId` | `string` | Yes | ID of the agent to message (from getAgents) |
-| `message` | `string` | Yes | The message content to send |
-| `contextId` | `string \| null` | No | Continue an existing conversation by providing its context ID |
-| `taskId` | `string \| null` | No | Attach to an existing task (for input-required flows) |
-| `timeout` | `number \| null` | No | Override the default timeout in seconds |
+| Parameter   | Type        | Required | Description                                                   |
+| ----------- | ----------- | -------- | ------------------------------------------------------------- |
+| `agentId`   | `string`    | Yes      | ID of the agent to message (from get_agents)                  |
+| `message`   | `string`    | Yes      | The message content to send                                   |
+| `contextId` | `string`    | No       | Continue an existing conversation by providing its context ID |
+| `taskId`    | `string`    | No       | Attach to an existing task (for input_required flows)         |
+| `timeout`   | `number`    | No       | Override the default timeout in seconds                       |
+| `data`      | `unknown[]` | No       | Structured data to include with the message                   |
+| `files`     | `string[]`  | No       | Files to include (local paths or URLs)                        |
 
 ```typescript
-const result = await tools.sendMessage(
-    "research-bot", "Find recent papers on quantum computing"
-);
+const result = await tools.sendMessage.execute({
+    agentId: "research-bot",
+    message: "Find recent papers on quantum computing",
+});
 ```
 
 Example result:
@@ -202,19 +213,19 @@ Example result:
                     "kind": "data",
                     "data": [
                         {
-                          "title": "Quantum Error Correction Advances",
-                          "year": 2025,
-                          "authors": "Chen et al."
+                            "title": "Quantum Error Correction Advances",
+                            "year": 2025,
+                            "authors": "Chen et al."
                         },
                         {
-                          "title": "Topological Quantum Computing Survey",
-                          "year": 2024,
-                          "authors": "Nakamura et al."
+                            "title": "Topological Quantum Computing Survey",
+                            "year": 2024,
+                            "authors": "Nakamura et al."
                         },
                         {
-                          "title": "Fault-Tolerant Logical Qubits",
-                          "year": 2024,
-                          "authors": "Wang et al."
+                            "title": "Fault-Tolerant Logical Qubits",
+                            "year": 2024,
+                            "authors": "Wang et al."
                         }
                     ]
                 }
@@ -238,46 +249,53 @@ Example result:
 Continue the conversation using `contextId`:
 
 ```typescript
-const result2 = await tools.sendMessage(
-    "research-bot",
-    "Summarize the most recent result",
-    "ctx-456",
-);
+const result2 = await tools.sendMessage.execute({
+    agentId: "research-bot",
+    message: "Summarize the most recent result",
+    contextId: "ctx-456",
+});
 ```
 
-#### `async getTask(agentId, taskId, timeout?, pollInterval?): Promise<Record<string, unknown>>`
+#### `getTask`
 
 Check the progress of a task that is still in progress. Use this after `sendMessage` returns a task in a non-terminal state (e.g. `"working"`).
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `agentId` | `string` | Yes | ID of the agent that owns the task |
-| `taskId` | `string` | Yes | Task ID from a previous sendMessage response |
-| `timeout` | `number \| null` | No | Override the monitoring timeout in seconds |
-| `pollInterval` | `number \| null` | No | Override the interval between status checks in seconds |
+| Parameter      | Type     | Required | Description                                            |
+| -------------- | -------- | -------- | ------------------------------------------------------ |
+| `agentId`      | `string` | Yes      | ID of the agent that owns the task                     |
+| `taskId`       | `string` | Yes      | Task ID from a previous send_message response          |
+| `timeout`      | `number` | No       | Override the monitoring timeout in seconds             |
+| `pollInterval` | `number` | No       | Override the interval between status checks in seconds |
 
 ```typescript
-const result = await tools.getTask("research-bot", "task-123");
+const result = await tools.getTask.execute({
+    agentId: "research-bot",
+    taskId: "task-123",
+});
 ```
 
-#### `async viewTextArtifact(agentId, taskId, artifactId, lineStart?, lineEnd?, characterStart?, characterEnd?): Promise<Record<string, unknown>>`
+#### `viewTextArtifact`
 
 View text content from an artifact, optionally selecting a range. Use this for artifacts containing text (documents, logs, code, etc.).
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `agentId` | `string` | Yes | ID of the agent that produced the artifact |
-| `taskId` | `string` | Yes | Task ID containing the artifact |
-| `artifactId` | `string` | Yes | The artifact's unique identifier |
-| `lineStart` | `number \| null` | No | Starting line number (1-based, inclusive) |
-| `lineEnd` | `number \| null` | No | Ending line number (1-based, inclusive) |
-| `characterStart` | `number \| null` | No | Starting character index (0-based, inclusive) |
-| `characterEnd` | `number \| null` | No | Ending character index (0-based, exclusive) |
+| Parameter        | Type     | Required | Description                                   |
+| ---------------- | -------- | -------- | --------------------------------------------- |
+| `agentId`        | `string` | Yes      | ID of the agent that produced the artifact    |
+| `taskId`         | `string` | Yes      | Task ID containing the artifact               |
+| `artifactId`     | `string` | Yes      | The artifact's unique identifier              |
+| `lineStart`      | `number` | No       | Starting line number (1-based, inclusive)     |
+| `lineEnd`        | `number` | No       | Ending line number (1-based, inclusive)       |
+| `characterStart` | `number` | No       | Starting character index (0-based, inclusive) |
+| `characterEnd`   | `number` | No       | Ending character index (0-based, exclusive)   |
 
 ```typescript
-const result = await tools.viewTextArtifact(
-    "research-bot", "task-123", "art-790", 1, 3
-);
+const result = await tools.viewTextArtifact.execute({
+    agentId: "research-bot",
+    taskId: "task-123",
+    artifactId: "art-790",
+    lineStart: 1,
+    lineEnd: 3,
+});
 ```
 
 Example result:
@@ -296,24 +314,27 @@ Example result:
 }
 ```
 
-#### `async viewDataArtifact(agentId, taskId, artifactId, jsonPath?, rows?, columns?): Promise<Record<string, unknown>>`
+#### `viewDataArtifact`
 
 View structured data from an artifact with optional filtering. Use this for artifacts containing JSON data (objects, arrays, tables).
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `agentId` | `string` | Yes | ID of the agent that produced the artifact |
-| `taskId` | `string` | Yes | Task ID containing the artifact |
-| `artifactId` | `string` | Yes | The artifact's unique identifier |
-| `jsonPath` | `string \| null` | No | Dot-separated path to navigate into the data (e.g. `"results.items"`) |
-| `rows` | `string \| null` | No | Row selection: `"0"`, `"0-10"`, `"0,2,5"`, `"all"` |
-| `columns` | `string \| null` | No | Column selection: `"name"`, `"name,age"`, `"all"` |
+| Parameter    | Type     | Required | Description                                                           |
+| ------------ | -------- | -------- | --------------------------------------------------------------------- |
+| `agentId`    | `string` | Yes      | ID of the agent that produced the artifact                            |
+| `taskId`     | `string` | Yes      | Task ID containing the artifact                                       |
+| `artifactId` | `string` | Yes      | The artifact's unique identifier                                      |
+| `jsonPath`   | `string` | No       | Dot-separated path to navigate into the data (e.g. `"results.items"`) |
+| `rows`       | `string` | No       | Row selection: `"0"`, `"0-10"`, `"0,2,5"`, `"all"`                    |
+| `columns`    | `string` | No       | Column selection: `"name"`, `"name,age"`, `"all"`                     |
 
 ```typescript
-const result = await tools.viewDataArtifact(
-    "research-bot", "task-123", "art-789",
-    undefined, "0-1", "title,year",
-);
+const result = await tools.viewDataArtifact.execute({
+    agentId: "research-bot",
+    taskId: "task-123",
+    artifactId: "art-789",
+    rows: "0-1",
+    columns: "title,year",
+});
 ```
 
 Example result:
@@ -327,8 +348,8 @@ Example result:
         {
             "kind": "data",
             "data": [
-                {"title": "Quantum Error Correction Advances", "year": 2025},
-                {"title": "Topological Quantum Computing Survey", "year": 2024}
+                { "title": "Quantum Error Correction Advances", "year": 2025 },
+                { "title": "Topological Quantum Computing Survey", "year": 2024 }
             ]
         }
     ]
@@ -353,43 +374,42 @@ const session = new A2ASession(
 );
 ```
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `agents` | `A2AAgents` | Yes | The agent manager instance |
-| `taskStore` | `TaskStore \| undefined` | No | Task store for persistence (default: `InMemoryTaskStore`) |
-| `fileStore` | `FileStore \| null` | No | File store for saving file artifacts (default: `null`) |
-| `sendMessageTimeout` | `number` | No | HTTP timeout in seconds for `sendMessage` (default: `60.0`) |
-| `getTaskTimeout` | `number` | No | Total monitoring timeout in seconds for `getTask` (default: `60.0`) |
-| `getTaskPollInterval` | `number` | No | Interval in seconds between `getTask` polls (default: `5.0`) |
+| Parameter             | Type                     | Required | Description                                                         |
+| --------------------- | ------------------------ | -------- | ------------------------------------------------------------------- |
+| `agents`              | `A2AAgents`              | Yes      | The agent manager instance                                          |
+| `taskStore`           | `TaskStore \| undefined` | No       | Task store for persistence (default: `InMemoryTaskStore`)           |
+| `fileStore`           | `FileStore \| null`      | No       | File store for saving file artifacts (default: `null`)              |
+| `sendMessageTimeout`  | `number`                 | No       | HTTP timeout in seconds for `sendMessage` (default: `60.0`)         |
+| `getTaskTimeout`      | `number`                 | No       | Total monitoring timeout in seconds for `getTask` (default: `60.0`) |
+| `getTaskPollInterval` | `number`                 | No       | Interval in seconds between `getTask` polls (default: `5.0`)        |
 
 #### `async sendMessage(agentId: string, message: string, opts?): Promise<Task | Message>`
 
 Send a message to an A2A agent. The returned task is automatically saved to the task store. File artifacts are saved via the file store.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `agentId` | `string` | Yes | Registered agent identifier |
-| `message` | `string` | Yes | The message content to send |
-| `opts.contextId` | `string \| null` | No | Context ID to continue a conversation (auto-generated when null) |
-| `opts.taskId` | `string \| null` | No | Task ID to attach to the message |
-| `opts.timeout` | `number \| null` | No | Override HTTP timeout in seconds (default: `sendMessageTimeout`) |
+| Parameter        | Type             | Required | Description                                                      |
+| ---------------- | ---------------- | -------- | ---------------------------------------------------------------- |
+| `agentId`        | `string`         | Yes      | Registered agent identifier                                      |
+| `message`        | `string`         | Yes      | The message content to send                                      |
+| `opts.contextId` | `string \| null` | No       | Context ID to continue a conversation (auto-generated when null) |
+| `opts.taskId`    | `string \| null` | No       | Task ID to attach to the message                                 |
+| `opts.timeout`   | `number \| null` | No       | Override HTTP timeout in seconds (default: `sendMessageTimeout`) |
 
 ```typescript
 import type { Task, Message } from "@a2a-js/sdk";
 
 const response = await session.sendMessage(
-    "research-bot", "Find recent papers on quantum computing"
+    "research-bot",
+    "Find recent papers on quantum computing",
 );
 ```
 
 Continue the conversation using `contextId`:
 
 ```typescript
-const response2 = await session.sendMessage(
-    "research-bot",
-    "Summarize the most recent result",
-    { contextId: response.contextId },
-);
+const response2 = await session.sendMessage("research-bot", "Summarize the most recent result", {
+    contextId: response.contextId,
+});
 ```
 
 **Returns:** `Task | Message` (from `@a2a-js/sdk`)
@@ -400,12 +420,12 @@ Get the current state of a task. Monitors until a terminal state (`completed`, `
 
 On monitoring timeout, returns the current task state (which may still be non-terminal, e.g. `working`). The only errors from `getTask` are failed HTTP requests (agent down, network error).
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `agentId` | `string` | Yes | Registered agent identifier |
-| `taskId` | `string` | Yes | Task ID from a previous `sendMessage` call |
-| `opts.timeout` | `number \| null` | No | Override monitoring timeout in seconds (default: `getTaskTimeout`) |
-| `opts.pollInterval` | `number \| null` | No | Override interval between polls in seconds (default: `getTaskPollInterval`) |
+| Parameter           | Type             | Required | Description                                                                 |
+| ------------------- | ---------------- | -------- | --------------------------------------------------------------------------- |
+| `agentId`           | `string`         | Yes      | Registered agent identifier                                                 |
+| `taskId`            | `string`         | Yes      | Task ID from a previous `sendMessage` call                                  |
+| `opts.timeout`      | `number \| null` | No       | Override monitoring timeout in seconds (default: `getTaskTimeout`)          |
+| `opts.pollInterval` | `number \| null` | No       | Override interval between polls in seconds (default: `getTaskPollInterval`) |
 
 ```typescript
 const task = await session.getTask("research-bot", "task-123");
@@ -424,7 +444,7 @@ import { A2AAgents } from "@a2anet/a2a-utils";
 const manager = new A2AAgents({
     "language-translator": {
         url: "https://example.com/language-translator/agent-card.json",
-        custom_headers: { "Authorization": "Bearer tok_123" },
+        custom_headers: { Authorization: "Bearer tok_123" },
     },
 });
 
@@ -450,9 +470,9 @@ const agents = await manager.getAgents();
 
 Generate summary of all agents, sorted by agent_id.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `detail` | `string` | No | Detail level: `"name"`, `"basic"` (default), `"skills"`, or `"full"` |
+| Parameter | Type     | Required | Description                                                          |
+| --------- | -------- | -------- | -------------------------------------------------------------------- |
+| `detail`  | `string` | No       | Detail level: `"name"`, `"basic"` (default), `"skills"`, or `"full"` |
 
 **Returns:** `Record<string, Record<string, unknown>>`
 
@@ -464,8 +484,8 @@ const summaries = await manager.getAgentsForLlm("name");
 
 ```json
 {
-  "code-reviewer": {"name": "Code Reviewer"},
-  "language-translator": {"name": "Universal Translator"}
+    "code-reviewer": { "name": "Code Reviewer" },
+    "language-translator": { "name": "Universal Translator" }
 }
 ```
 
@@ -477,14 +497,14 @@ const summaries = await manager.getAgentsForLlm();
 
 ```json
 {
-  "code-reviewer": {
-    "name": "Code Reviewer",
-    "description": "Review code for best practices"
-  },
-  "language-translator": {
-    "name": "Universal Translator",
-    "description": "Translate text and audio between 50+ languages"
-  }
+    "code-reviewer": {
+        "name": "Code Reviewer",
+        "description": "Review code for best practices"
+    },
+    "language-translator": {
+        "name": "Universal Translator",
+        "description": "Translate text and audio between 50+ languages"
+    }
 }
 ```
 
@@ -496,16 +516,16 @@ const summaries = await manager.getAgentsForLlm("skills");
 
 ```json
 {
-  "code-reviewer": {
-    "name": "Code Reviewer",
-    "description": "Review code for best practices",
-    "skills": ["Review Code"]
-  },
-  "language-translator": {
-    "name": "Universal Translator",
-    "description": "Translate text between 50+ languages",
-    "skills": ["Translate Text", "Translate Audio"]
-  }
+    "code-reviewer": {
+        "name": "Code Reviewer",
+        "description": "Review code for best practices",
+        "skills": ["Review Code"]
+    },
+    "language-translator": {
+        "name": "Universal Translator",
+        "description": "Translate text between 50+ languages",
+        "skills": ["Translate Text", "Translate Audio"]
+    }
 }
 ```
 
@@ -517,30 +537,30 @@ const summaries = await manager.getAgentsForLlm("full");
 
 ```json
 {
-  "code-reviewer": {
-    "name": "Code Reviewer",
-    "description": "Review code for best practices",
-    "skills": [
-      {
-        "name": "Review Code",
-        "description": "Review code for best practices, identify bugs, and suggest improvements"
-      }
-    ]
-  },
-  "language-translator": {
-    "name": "Universal Translator",
-    "description": "Translate text between 50+ languages",
-    "skills": [
-      {
-        "name": "Translate Text",
-        "description": "Translate text between any supported language pair"
-      },
-      {
-        "name": "Translate Audio",
-        "description": "Translate audio between any supported language pair"
-      }
-    ]
-  }
+    "code-reviewer": {
+        "name": "Code Reviewer",
+        "description": "Review code for best practices",
+        "skills": [
+            {
+                "name": "Review Code",
+                "description": "Review code for best practices, identify bugs, and suggest improvements"
+            }
+        ]
+    },
+    "language-translator": {
+        "name": "Universal Translator",
+        "description": "Translate text between 50+ languages",
+        "skills": [
+            {
+                "name": "Translate Text",
+                "description": "Translate text between any supported language pair"
+            },
+            {
+                "name": "Translate Audio",
+                "description": "Translate audio between any supported language pair"
+            }
+        ]
+    }
 }
 ```
 
@@ -549,9 +569,9 @@ const summaries = await manager.getAgentsForLlm("full");
 Retrieve agent by ID.
 Note: this should NOT be added to the LLM's context, use `getAgentForLlm` instead.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `agentId` | `string` | Yes | User-defined agent identifier |
+| Parameter | Type     | Required | Description                   |
+| --------- | -------- | -------- | ----------------------------- |
+| `agentId` | `string` | Yes      | User-defined agent identifier |
 
 **Returns:** [`AgentURLAndCustomHeaders`](#agenturlandcustomheaders) | `null`
 
@@ -565,10 +585,10 @@ Returns `null` if the agent ID is not registered.
 
 Generate summary for a single agent.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `agentId` | `string` | Yes | User-defined agent identifier |
-| `detail` | `string` | No | Detail level: `"name"`, `"basic"` (default), `"skills"`, or `"full"` |
+| Parameter | Type     | Required | Description                                                          |
+| --------- | -------- | -------- | -------------------------------------------------------------------- |
+| `agentId` | `string` | Yes      | User-defined agent identifier                                        |
+| `detail`  | `string` | No       | Detail level: `"name"`, `"basic"` (default), `"skills"`, or `"full"` |
 
 **Returns:** `Record<string, unknown> | null` — summary object or `null` if not found.
 
@@ -578,8 +598,8 @@ const summary = await manager.getAgentForLlm("language-translator");
 
 ```json
 {
-  "name": "Universal Translator",
-  "description": "Translate text and audio between 50+ languages"
+    "name": "Universal Translator",
+    "description": "Translate text and audio between 50+ languages"
 }
 ```
 
@@ -587,20 +607,18 @@ const summary = await manager.getAgentForLlm("language-translator");
 
 Register a new agent at runtime.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `agentId` | `string` | Yes | User-defined agent identifier |
-| `url` | `string` | Yes | Agent card URL |
-| `customHeaders` | `Record<string, string>` | No | Custom HTTP headers |
+| Parameter       | Type                     | Required | Description                   |
+| --------------- | ------------------------ | -------- | ----------------------------- |
+| `agentId`       | `string`                 | Yes      | User-defined agent identifier |
+| `url`           | `string`                 | Yes      | Agent card URL                |
+| `customHeaders` | `Record<string, string>` | No       | Custom HTTP headers           |
 
 **Throws:** `Error` if `agentId` is already registered.
 
 ```typescript
-await manager.addAgent(
-    "code-reviewer",
-    "https://review.example.com/.well-known/agent-card.json",
-    { "X-API-Key": "key_123" },
-);
+await manager.addAgent("code-reviewer", "https://review.example.com/.well-known/agent-card.json", {
+    "X-API-Key": "key_123",
+});
 ```
 
 ### 💾 JSONTaskStore
@@ -664,7 +682,7 @@ const savedPaths = await fileStore.save("task-123", artifact);
 Example result:
 
 ```typescript
-["./storage/files/task-123/art-789/quarterly_report.pdf"]
+["./storage/files/task-123/art-789/quarterly_report.pdf"];
 ```
 
 ##### `async get(taskId: string, artifactId: string): Promise<string[]>`
@@ -678,7 +696,7 @@ const paths = await fileStore.get("task-123", "art-789");
 Example result:
 
 ```typescript
-["./storage/files/task-123/art-789/quarterly_report.pdf"]
+["./storage/files/task-123/art-789/quarterly_report.pdf"];
 ```
 
 Returns an empty array if no files are found.
@@ -701,14 +719,14 @@ await fileStore.delete("task-123", "art-789");
 
 View text content with optional line or character range selection. Supports line selection (1-based, inclusive) or character selection (0-based, slice semantics). These are mutually exclusive — providing both throws an `Error`.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `text` | `string` | Yes | The text to view |
-| `opts.lineStart` | `number \| null` | No | Starting line number (1-based, inclusive) |
-| `opts.lineEnd` | `number \| null` | No | Ending line number (1-based, inclusive) |
-| `opts.characterStart` | `number \| null` | No | Starting character index (0-based, inclusive) |
-| `opts.characterEnd` | `number \| null` | No | Ending character index (0-based, exclusive) |
-| `opts.characterLimit` | `number` | No | Maximum output size (default: `50,000`) |
+| Parameter             | Type             | Required | Description                                   |
+| --------------------- | ---------------- | -------- | --------------------------------------------- |
+| `text`                | `string`         | Yes      | The text to view                              |
+| `opts.lineStart`      | `number \| null` | No       | Starting line number (1-based, inclusive)     |
+| `opts.lineEnd`        | `number \| null` | No       | Ending line number (1-based, inclusive)       |
+| `opts.characterStart` | `number \| null` | No       | Starting character index (0-based, inclusive) |
+| `opts.characterEnd`   | `number \| null` | No       | Ending character index (0-based, exclusive)   |
+| `opts.characterLimit` | `number`         | No       | Maximum output size (default: `50,000`)       |
 
 **Returns:** `string`
 
@@ -743,11 +761,11 @@ Example result:
 
 Minimize text content for display. If text is within the character limit, returns it unchanged. If over the limit, shows first and last halves with metadata.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `text` | `string` | Yes | The text content to minimize |
-| `opts.characterLimit` | `number` | No | Character limit (default: `50,000`) |
-| `opts.tip` | `string \| null` | No | Tip string (default: `null`; pass a string to include one) |
+| Parameter             | Type             | Required | Description                                                |
+| --------------------- | ---------------- | -------- | ---------------------------------------------------------- |
+| `text`                | `string`         | Yes      | The text content to minimize                               |
+| `opts.characterLimit` | `number`         | No       | Character limit (default: `50,000`)                        |
+| `opts.tip`            | `string \| null` | No       | Tip string (default: `null`; pass a string to include one) |
 
 **Returns:** `Record<string, unknown>`
 
@@ -760,7 +778,7 @@ TextArtifacts.minimize("Hello, world!");
 ```
 
 ```json
-{"text": "Hello, world!"}
+{ "text": "Hello, world!" }
 ```
 
 Long text (over limit):
@@ -787,13 +805,13 @@ TextArtifacts.minimize("x".repeat(60_000));
 
 View structured data with optional filtering. Navigate with `jsonPath`, then filter with `rows`/`columns`.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `data` | `unknown` | Yes | The data to view |
-| `opts.jsonPath` | `string \| null` | No | Dot-separated path to extract specific fields |
-| `opts.rows` | `number \| number[] \| string \| null` | No | Row selection |
-| `opts.columns` | `string \| string[] \| null` | No | Column selection |
-| `opts.characterLimit` | `number` | No | Maximum output size (default: `50,000`) |
+| Parameter             | Type                                   | Required | Description                                   |
+| --------------------- | -------------------------------------- | -------- | --------------------------------------------- |
+| `data`                | `unknown`                              | Yes      | The data to view                              |
+| `opts.jsonPath`       | `string \| null`                       | No       | Dot-separated path to extract specific fields |
+| `opts.rows`           | `number \| number[] \| string \| null` | No       | Row selection                                 |
+| `opts.columns`        | `string \| string[] \| null`           | No       | Column selection                              |
+| `opts.characterLimit` | `number`                               | No       | Maximum output size (default: `50,000`)       |
 
 **Returns:** `unknown` (filtered data)
 
@@ -815,8 +833,8 @@ Example result:
 
 ```json
 [
-    {"name": "Alice", "department": "Engineering"},
-    {"name": "Bob", "department": "Design"}
+    { "name": "Alice", "department": "Engineering" },
+    { "name": "Bob", "department": "Design" }
 ]
 ```
 
@@ -824,12 +842,12 @@ Example result:
 
 Minimize data content for display based on type. Automatically selects the best strategy: list-of-objects gets a table summary, dicts get string truncation, strings delegate to `TextArtifacts.minimize`.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `data` | `unknown` | Yes | The data to minimize |
-| `opts.characterLimit` | `number` | No | Character limit (default: `50,000`) |
-| `opts.minimizedObjectStringLength` | `number` | No | Max string length in objects (default: `5,000`) |
-| `opts.tip` | `string \| null` | No | Tip string (default: `null`; pass a string to include one) |
+| Parameter                          | Type             | Required | Description                                                |
+| ---------------------------------- | ---------------- | -------- | ---------------------------------------------------------- |
+| `data`                             | `unknown`        | Yes      | The data to minimize                                       |
+| `opts.characterLimit`              | `number`         | No       | Character limit (default: `50,000`)                        |
+| `opts.minimizedObjectStringLength` | `number`         | No       | Max string length in objects (default: `5,000`)            |
+| `opts.tip`                         | `string \| null` | No       | Tip string (default: `null`; pass a string to include one) |
 
 **Returns:** `Record<string, unknown>`
 
@@ -868,46 +886,52 @@ DataArtifacts.minimize(data, { characterLimit: 100, minimizedObjectStringLength:
                 {
                     "count": 100,
                     "unique_count": 100,
-                    "types": [{
-                        "name": "string",
-                        "count": 100,
-                        "percentage": 100.0,
-                        "sample_value": "Employee 42",
-                        "length_minimum": 10,
-                        "length_maximum": 11,
-                        "length_average": 10.9,
-                        "length_stdev": 0.3
-                    }],
+                    "types": [
+                        {
+                            "name": "string",
+                            "count": 100,
+                            "percentage": 100.0,
+                            "sample_value": "Employee 42",
+                            "length_minimum": 10,
+                            "length_maximum": 11,
+                            "length_average": 10.9,
+                            "length_stdev": 0.3
+                        }
+                    ],
                     "name": "name"
                 },
                 {
                     "count": 100,
                     "unique_count": 4,
-                    "types": [{
-                        "name": "string",
-                        "count": 100,
-                        "percentage": 100.0,
-                        "sample_value": "Engineering",
-                        "length_minimum": 5,
-                        "length_maximum": 11,
-                        "length_average": 7.75,
-                        "length_stdev": 2.4
-                    }],
+                    "types": [
+                        {
+                            "name": "string",
+                            "count": 100,
+                            "percentage": 100.0,
+                            "sample_value": "Engineering",
+                            "length_minimum": 5,
+                            "length_maximum": 11,
+                            "length_average": 7.75,
+                            "length_stdev": 2.4
+                        }
+                    ],
                     "name": "department"
                 },
                 {
                     "count": 100,
                     "unique_count": 100,
-                    "types": [{
-                        "name": "int",
-                        "count": 100,
-                        "percentage": 100.0,
-                        "sample_value": 75000,
-                        "minimum": 60000,
-                        "maximum": 109500,
-                        "average": 84750,
-                        "stdev": 14505.75
-                    }],
+                    "types": [
+                        {
+                            "name": "int",
+                            "count": 100,
+                            "percentage": 100.0,
+                            "sample_value": 75000,
+                            "minimum": 60000,
+                            "maximum": 109500,
+                            "average": 84750,
+                            "stdev": 14505.75
+                        }
+                    ],
                     "name": "salary"
                 }
             ],
@@ -922,9 +946,9 @@ DataArtifacts.minimize(data, { characterLimit: 100, minimizedObjectStringLength:
 
 Generate a summary of tabular data (array of objects). Returns one summary object per column with count, unique count, and per-type statistics.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `data` | `Record<string, unknown>[]` | Yes | Table rows |
+| Parameter | Type                        | Required | Description |
+| --------- | --------------------------- | -------- | ----------- |
+| `data`    | `Record<string, unknown>[]` | Yes      | Table rows  |
 
 **Returns:** `Record<string, unknown>[]`
 
@@ -1000,9 +1024,9 @@ DataArtifacts.summarizeTable(data);
 
 Generate statistics for a list of values (like a single column). Includes count, unique count, and per-type statistics (min/max/avg/stdev for numbers, length stats for strings, etc.). If the summary would be larger than the original values, the original list is returned instead (inflation guard).
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `values` | `unknown[]` | Yes | Values to summarize |
+| Parameter | Type        | Required | Description         |
+| --------- | ----------- | -------- | ------------------- |
+| `values`  | `unknown[]` | Yes      | Values to summarize |
 
 **Returns:** `Record<string, unknown> | unknown[]`
 
@@ -1010,9 +1034,17 @@ Generate statistics for a list of values (like a single column). Includes count,
 import { DataArtifacts } from "@a2anet/a2a-utils";
 
 const salaries = [
-    95000, 72000, 105000, 68000, 88000,
+    95000,
+    72000,
+    105000,
+    68000,
+    88000,
     // ... ~100 salary values total, with some nulls
-    null, 115000, 92000, null, 78000,
+    null,
+    115000,
+    92000,
+    null,
+    78000,
 ];
 
 DataArtifacts.summarizeValues(salaries);
@@ -1047,14 +1079,14 @@ DataArtifacts.summarizeValues(salaries);
 
 Minimize a list of artifacts for LLM display. Called automatically by `A2ATools.sendMessage`. Combines all TextParts within each artifact into a single [`TextPartForLLM`](#textpartforllm). Handles `FilePart`s by including file metadata and saved paths.
 
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `artifacts` | `Artifact[]` | Yes | List of artifacts to minimize |
-| `opts.characterLimit` | `number` | No | Character limit (default: `50,000`) |
-| `opts.minimizedObjectStringLength` | `number` | No | Max string length in objects (default: `5,000`) |
-| `opts.savedFilePaths` | `Record<string, string[]> \| null` | No | Mapping of artifactId to saved file paths |
-| `opts.textTip` | `string \| null` | No | Tip string for minimized text artifacts (default: `null`) |
-| `opts.dataTip` | `string \| null` | No | Tip string for minimized data artifacts (default: `null`) |
+| Parameter                          | Type                               | Required | Description                                               |
+| ---------------------------------- | ---------------------------------- | -------- | --------------------------------------------------------- |
+| `artifacts`                        | `Artifact[]`                       | Yes      | List of artifacts to minimize                             |
+| `opts.characterLimit`              | `number`                           | No       | Character limit (default: `50,000`)                       |
+| `opts.minimizedObjectStringLength` | `number`                           | No       | Max string length in objects (default: `5,000`)           |
+| `opts.savedFilePaths`              | `Record<string, string[]> \| null` | No       | Mapping of artifactId to saved file paths                 |
+| `opts.textTip`                     | `string \| null`                   | No       | Tip string for minimized text artifacts (default: `null`) |
+| `opts.dataTip`                     | `string \| null`                   | No       | Tip string for minimized data artifacts (default: `null`) |
 
 **Returns:** [`ArtifactForLLM`](#artifactforllm)`[]`
 
@@ -1073,14 +1105,16 @@ const artifacts: Artifact[] = [
         artifactId: "art-456",
         description: "Company employee directory with names, departments, and salaries.",
         name: "Employee Directory",
-        parts: [{
-            kind: "data",
-            data: Array.from({ length: 100 }, (_, i) => ({
-                name: `Employee ${i}`,
-                department: ["Eng", "Marketing", "Design", "Sales"][i % 4],
-                salary: 60_000 + i * 500,
-            })),
-        }],
+        parts: [
+            {
+                kind: "data",
+                data: Array.from({ length: 100 }, (_, i) => ({
+                    name: `Employee ${i}`,
+                    department: ["Eng", "Marketing", "Design", "Sales"][i % 4],
+                    salary: 60_000 + i * 500,
+                })),
+            },
+        ],
     },
     {
         artifactId: "art-789",
@@ -1195,14 +1229,14 @@ const agent: AgentURLAndCustomHeaders = {
 };
 ```
 
-| Field | Type |
-|---|---|
-| `agentCard` | `AgentCard` |
+| Field           | Type                     |
+| --------------- | ------------------------ |
+| `agentCard`     | `AgentCard`              |
 | `customHeaders` | `Record<string, string>` |
 
 #### `TaskForLLM`
 
-Returned by `A2ATools.sendMessage()` for task responses.
+Returned by `A2ATools.sendMessage.execute()` for task responses.
 
 ```typescript
 const task: TaskForLLM = {
@@ -1265,17 +1299,17 @@ const task: TaskForLLM = {
 };
 ```
 
-| Field | Type |
-|---|---|
-| `id` | `string` |
-| `contextId` | `string` |
-| `kind` | `string` (`"task"`) |
-| `status` | [`TaskStatusForLLM`](#taskstatusforllm) |
+| Field       | Type                                    |
+| ----------- | --------------------------------------- |
+| `id`        | `string`                                |
+| `contextId` | `string`                                |
+| `kind`      | `string` (`"task"`)                     |
+| `status`    | [`TaskStatusForLLM`](#taskstatusforllm) |
 | `artifacts` | [`ArtifactForLLM`](#artifactforllm)`[]` |
 
 #### `MessageForLLM`
 
-Returned by `A2ATools.sendMessage()` for message-only responses, or as `TaskStatusForLLM.message`.
+Returned by `A2ATools.sendMessage.execute()` for message-only responses, or as `TaskStatusForLLM.message`.
 
 ```typescript
 const message: MessageForLLM = {
@@ -1290,11 +1324,11 @@ const message: MessageForLLM = {
 };
 ```
 
-| Field | Type |
-|---|---|
-| `contextId` | `string \| null` |
-| `kind` | `string` (`"message"`) |
-| `parts` | ([`TextPartForLLM`](#textpartforllm) \| [`DataPartForLLM`](#datapartforllm) \| [`FilePartForLLM`](#filepartforllm))[] |
+| Field       | Type                                                                                                                  |
+| ----------- | --------------------------------------------------------------------------------------------------------------------- |
+| `contextId` | `string \| null`                                                                                                      |
+| `kind`      | `string` (`"message"`)                                                                                                |
+| `parts`     | ([`TextPartForLLM`](#textpartforllm) \| [`DataPartForLLM`](#datapartforllm) \| [`FilePartForLLM`](#filepartforllm))[] |
 
 #### `TaskStatusForLLM`
 
@@ -1314,14 +1348,14 @@ const taskStatus: TaskStatusForLLM = {
 };
 ```
 
-| Field | Type |
-|---|---|
-| `state` | `TaskState` |
+| Field     | Type                                        |
+| --------- | ------------------------------------------- |
+| `state`   | `TaskState`                                 |
 | `message` | [`MessageForLLM`](#messageforllm) `\| null` |
 
 #### `ArtifactForLLM`
 
-Returned by `viewTextArtifact()`, `viewDataArtifact()`, and `minimizeArtifacts()`. Used in `TaskForLLM.artifacts`.
+Returned by `viewTextArtifact.execute()`, `viewDataArtifact.execute()`, and `minimizeArtifacts()`. Used in `TaskForLLM.artifacts`.
 
 ```typescript
 const artifact: ArtifactForLLM = {
@@ -1337,12 +1371,12 @@ const artifact: ArtifactForLLM = {
 };
 ```
 
-| Field | Type |
-|---|---|
-| `artifactId` | `string` |
-| `description` | `string \| null` |
-| `name` | `string \| null` |
-| `parts` | ([`TextPartForLLM`](#textpartforllm) \| [`DataPartForLLM`](#datapartforllm) \| [`FilePartForLLM`](#filepartforllm))[] |
+| Field         | Type                                                                                                                  |
+| ------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `artifactId`  | `string`                                                                                                              |
+| `description` | `string \| null`                                                                                                      |
+| `name`        | `string \| null`                                                                                                      |
+| `parts`       | ([`TextPartForLLM`](#textpartforllm) \| [`DataPartForLLM`](#datapartforllm) \| [`FilePartForLLM`](#filepartforllm))[] |
 
 #### `TextPartForLLM`
 
@@ -1353,10 +1387,10 @@ const textPart: TextPartForLLM = {
 };
 ```
 
-| Field | Type |
-|---|---|
+| Field  | Type                |
+| ------ | ------------------- |
 | `kind` | `string` (`"text"`) |
-| `text` | `string` |
+| `text` | `string`            |
 
 #### `DataPartForLLM`
 
@@ -1383,10 +1417,10 @@ const dataPart: DataPartForLLM = {
 };
 ```
 
-| Field | Type |
-|---|---|
+| Field  | Type                |
+| ------ | ------------------- |
 | `kind` | `string` (`"data"`) |
-| `data` | `unknown` |
+| `data` | `unknown`           |
 
 #### `FilePartForLLM`
 
@@ -1399,20 +1433,18 @@ const filePart: FilePartForLLM = {
     mimeType: "application/pdf",
     uri: null,
     bytes: {
-        _saved_to: [
-            "./storage/files/task-123/art-789/q4-report.pdf",
-        ],
+        _saved_to: ["./storage/files/task-123/art-789/q4-report.pdf"],
     },
 };
 ```
 
-| Field | Type | Description |
-|---|---|---|
-| `kind` | `string` (`"file"`) | Always `"file"` |
-| `name` | `string \| null` | Filename from the original FilePart |
-| `mimeType` | `string \| null` | MIME type from the original FilePart |
-| `uri` | `string \| Record<string, unknown> \| null` | Raw URI (no FileStore) or `{"_saved_to": [...]}` (FileStore saved it) |
-| `bytes` | `Record<string, unknown> \| null` | `{"_saved_to": [...]}` (FileStore saved it) or `{"_error": "..."}` (no FileStore) |
+| Field      | Type                                        | Description                                                                       |
+| ---------- | ------------------------------------------- | --------------------------------------------------------------------------------- |
+| `kind`     | `string` (`"file"`)                         | Always `"file"`                                                                   |
+| `name`     | `string \| null`                            | Filename from the original FilePart                                               |
+| `mimeType` | `string \| null`                            | MIME type from the original FilePart                                              |
+| `uri`      | `string \| Record<string, unknown> \| null` | Raw URI (no FileStore) or `{"_saved_to": [...]}` (FileStore saved it)             |
+| `bytes`    | `Record<string, unknown> \| null`           | `{"_saved_to": [...]}` (FileStore saved it) or `{"_error": "..."}` (no FileStore) |
 
 ## 📄 License
 

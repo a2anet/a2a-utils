@@ -49,6 +49,7 @@ The root package exports are intentionally aligned.
 | `ArtifactForLLM` | `ArtifactForLLM` |
 | `MessageForLLM` | `MessageForLLM` |
 | `TaskStatusForLLM` | `TaskStatusForLLM` |
+| N/A | `A2AToolDefinition` |
 | `TaskForLLM` | `TaskForLLM` |
 
 ## Module Mapping
@@ -80,6 +81,7 @@ These are expected and should not be treated as parity bugs by themselves.
 | HTTP client/header wiring | `httpx` request kwargs | wrapped `fetch` passed to client |
 | Concurrency guard pattern | `asyncio.Lock` | single-flight `Promise` |
 | Task/file validation | Pydantic-backed SDK models | plain JS objects typed against SDK |
+| Tool definition metadata | Runtime introspection of docstrings and type hints | `A2AToolDefinition` with Zod schemas (TypeScript strips types at compile time) |
 
 ## Behavioral Expectations
 

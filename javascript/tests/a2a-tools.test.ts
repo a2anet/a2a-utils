@@ -61,7 +61,7 @@ describe("getAgents", () => {
         spyOn(getToolsInternals(tools).session.agents, "getAgentsForLlm").mockResolvedValue({
             "agent-a": { name: "Agent A", description: "Does A things" },
         });
-        const result = await tools.getAgents();
+        const result = await tools.getAgents.execute({});
         expect(result["agent-a"]).toBeDefined();
         expect((result["agent-a"] as Record<string, unknown>).name).toBe("Agent A");
     });
@@ -73,7 +73,7 @@ describe("getAgents", () => {
         managerInternals.initErrors = {
             "bad-agent": "ConnectionError: refused",
         };
-        const result = await tools.getAgents();
+        const result = await tools.getAgents.execute({});
         expect(result.agents).toEqual({});
         expect((result.errors as Record<string, string>)["bad-agent"]).toContain(
             "Failed to load agent",
@@ -85,7 +85,7 @@ describe("getAgents", () => {
         spyOn(getToolsInternals(tools).session.agents, "getAgentsForLlm").mockRejectedValue(
             new Error("boom"),
         );
-        const result = await tools.getAgents();
+        const result = await tools.getAgents.execute({});
         expect(result.error).toBe(true);
         expect(result.error_message).toContain("boom");
     });
@@ -99,7 +99,7 @@ describe("getAgent", () => {
             description: "Does A things",
             skills: [{ name: "search", description: "Search the web" }],
         });
-        const result = await tools.getAgent("agent-a");
+        const result = await tools.getAgent.execute({ agentId: "agent-a" });
         expect(result.name).toBe("Agent A");
         expect((result.skills as unknown[]).length).toBe(1);
     });
@@ -110,7 +110,7 @@ describe("getAgent", () => {
         spyOn(getToolsInternals(tools).session.agents, "getAgents").mockResolvedValue({
             "agent-b": { agentCard: {} as unknown as AgentCard, customHeaders: {} },
         });
-        const result = await tools.getAgent("nonexistent");
+        const result = await tools.getAgent.execute({ agentId: "nonexistent" });
         expect(result.error).toBe(true);
         expect(result.error_message).toContain("not found");
         expect(result.error_message).toContain("get_agents");
@@ -122,7 +122,7 @@ describe("getAgent", () => {
         spyOn(getToolsInternals(tools).session.agents, "getAgentForLlm").mockRejectedValue(
             new Error("kaboom"),
         );
-        const result = await tools.getAgent("agent-a");
+        const result = await tools.getAgent.execute({ agentId: "agent-a" });
         expect(result.error).toBe(true);
         expect(result.error_message).toContain("kaboom");
     });
@@ -139,7 +139,7 @@ describe("sendMessage", () => {
             artifacts: [],
         };
         spyOn(getToolsInternals(tools).session, "sendMessage").mockResolvedValue(task);
-        const result = await tools.sendMessage("agent-a", "hello");
+        const result = await tools.sendMessage.execute({ agentId: "agent-a", message: "hello" });
         expect(result.id).toBe("task-1");
         expect(result.kind).toBe("task");
         expect((result.status as Record<string, unknown>).state).toBe("completed");
@@ -155,7 +155,7 @@ describe("sendMessage", () => {
             role: "agent",
         };
         spyOn(getToolsInternals(tools).session, "sendMessage").mockResolvedValue(msg);
-        const result = await tools.sendMessage("agent-a", "hello");
+        const result = await tools.sendMessage.execute({ agentId: "agent-a", message: "hello" });
         expect(result.kind).toBe("message");
         expect((result.parts as unknown[])[0]).toEqual({ kind: "text", text: "Hi there" });
     });
@@ -165,7 +165,7 @@ describe("sendMessage", () => {
         spyOn(getToolsInternals(tools).session, "sendMessage").mockRejectedValue(
             new Error("Agent 'bad' not found. Available agents: agent-a"),
         );
-        const result = await tools.sendMessage("bad", "hello");
+        const result = await tools.sendMessage.execute({ agentId: "bad", message: "hello" });
         expect(result.error).toBe(true);
         expect(result.error_message).toContain("not found");
         expect(result.error_message).toContain("get_agents");
@@ -176,7 +176,7 @@ describe("sendMessage", () => {
         spyOn(getToolsInternals(tools).session, "sendMessage").mockRejectedValue(
             new DOMException("The operation timed out.", "TimeoutError"),
         );
-        const result = await tools.sendMessage("agent-a", "hello");
+        const result = await tools.sendMessage.execute({ agentId: "agent-a", message: "hello" });
         expect(result.error).toBe(true);
         expect(result.error_message).toContain("timed out");
     });
@@ -186,7 +186,7 @@ describe("sendMessage", () => {
         spyOn(getToolsInternals(tools).session, "sendMessage").mockRejectedValue(
             new Error("network error"),
         );
-        const result = await tools.sendMessage("agent-a", "hello");
+        const result = await tools.sendMessage.execute({ agentId: "agent-a", message: "hello" });
         expect(result.error).toBe(true);
         expect(result.error_message).toContain("network error");
     });
@@ -203,7 +203,7 @@ describe("getTask", () => {
             artifacts: [],
         };
         spyOn(getToolsInternals(tools).session, "getTask").mockResolvedValue(task);
-        const result = await tools.getTask("agent-a", "task-1");
+        const result = await tools.getTask.execute({ agentId: "agent-a", taskId: "task-1" });
         expect(result.id).toBe("task-1");
         expect((result.status as Record<string, unknown>).state).toBe("working");
     });
@@ -213,7 +213,7 @@ describe("getTask", () => {
         spyOn(getToolsInternals(tools).session, "getTask").mockRejectedValue(
             new Error("Agent 'bad' not found"),
         );
-        const result = await tools.getTask("bad", "task-1");
+        const result = await tools.getTask.execute({ agentId: "bad", taskId: "task-1" });
         expect(result.error).toBe(true);
         expect(result.error_message).toContain("not found");
         expect(result.error_message).toContain("get_agents");
@@ -224,7 +224,7 @@ describe("getTask", () => {
         spyOn(getToolsInternals(tools).session, "getTask").mockRejectedValue(
             new DOMException("The operation timed out.", "TimeoutError"),
         );
-        const result = await tools.getTask("agent-a", "task-1");
+        const result = await tools.getTask.execute({ agentId: "agent-a", taskId: "task-1" });
         expect(result.error).toBe(true);
         expect(result.error_message).toContain("timed out");
     });
@@ -240,7 +240,11 @@ describe("viewTextArtifact", () => {
             parts: [{ kind: "text", text: "line1\nline2" }],
         };
         spyOn(getToolsInternals(tools), "getArtifact").mockResolvedValue(artifact);
-        const result = await tools.viewTextArtifact("agent-a", "task-1", "art-1");
+        const result = await tools.viewTextArtifact.execute({
+            agentId: "agent-a",
+            taskId: "task-1",
+            artifactId: "art-1",
+        });
         expect(result.artifactId).toBe("art-1");
         const parts = result.parts as unknown[];
         expect((parts[0] as Record<string, unknown>).text).toBe("line1\nline2");
@@ -251,7 +255,11 @@ describe("viewTextArtifact", () => {
         spyOn(getToolsInternals(tools), "getArtifact").mockRejectedValue(
             new Error("Artifact 'art-x' not found in task 'task-1'"),
         );
-        const result = await tools.viewTextArtifact("agent-a", "task-1", "art-x");
+        const result = await tools.viewTextArtifact.execute({
+            agentId: "agent-a",
+            taskId: "task-1",
+            artifactId: "art-x",
+        });
         expect(result.error).toBe(true);
         expect(result.error_message).toContain("art-x");
         expect(result.error_message).toContain("task-1");
@@ -264,7 +272,11 @@ describe("viewTextArtifact", () => {
             parts: [{ kind: "data", data: { key: "value" } }],
         };
         spyOn(getToolsInternals(tools), "getArtifact").mockResolvedValue(artifact);
-        const result = await tools.viewTextArtifact("agent-a", "task-1", "art-1");
+        const result = await tools.viewTextArtifact.execute({
+            agentId: "agent-a",
+            taskId: "task-1",
+            artifactId: "art-1",
+        });
         expect(result.error).toBe(true);
         expect(result.error_message).toContain("does not contain text");
     });
@@ -280,7 +292,11 @@ describe("viewDataArtifact", () => {
             parts: [{ kind: "data", data: { key: "value" } }],
         };
         spyOn(getToolsInternals(tools), "getArtifact").mockResolvedValue(artifact);
-        const result = await tools.viewDataArtifact("agent-a", "task-1", "art-1");
+        const result = await tools.viewDataArtifact.execute({
+            agentId: "agent-a",
+            taskId: "task-1",
+            artifactId: "art-1",
+        });
         expect(result.artifactId).toBe("art-1");
         const parts = result.parts as unknown[];
         expect((parts[0] as Record<string, unknown>).data).toEqual({ key: "value" });
@@ -303,14 +319,14 @@ describe("viewDataArtifact", () => {
             ],
         };
         spyOn(getToolsInternals(tools), "getArtifact").mockResolvedValue(artifact);
-        const result = await tools.viewDataArtifact(
-            "agent-a",
-            "task-1",
-            "art-1",
-            "employees",
-            "0",
-            "name",
-        );
+        const result = await tools.viewDataArtifact.execute({
+            agentId: "agent-a",
+            taskId: "task-1",
+            artifactId: "art-1",
+            jsonPath: "employees",
+            rows: "0",
+            columns: "name",
+        });
         const parts = result.parts as unknown[];
         expect((parts[0] as Record<string, unknown>).data).toEqual([{ name: "Alice" }]);
     });
@@ -320,7 +336,11 @@ describe("viewDataArtifact", () => {
         spyOn(getToolsInternals(tools), "getArtifact").mockRejectedValue(
             new Error("Artifact 'art-x' not found in task 'task-1'"),
         );
-        const result = await tools.viewDataArtifact("agent-a", "task-1", "art-x");
+        const result = await tools.viewDataArtifact.execute({
+            agentId: "agent-a",
+            taskId: "task-1",
+            artifactId: "art-x",
+        });
         expect(result.error).toBe(true);
         expect(result.error_message).toContain("art-x");
     });
