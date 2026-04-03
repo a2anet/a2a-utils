@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/a2anet/a2a-utils/compare/a2a-utils-javascript-v0.4.0...a2a-utils-javascript-v0.5.0) (2026-04-03)
+
+
+### Features
+
+* add data and files parameters to A2ASession and A2ATools, save files in Messages ([cdae897](https://github.com/a2anet/a2a-utils/commit/cdae89795dfb3962482a2ee6f14dd62998973d83))
+
 ## [0.4.0](https://github.com/a2anet/a2a-utils/compare/a2a-utils-javascript-v0.3.0...a2a-utils-javascript-v0.4.0) (2026-03-26)
 
 
