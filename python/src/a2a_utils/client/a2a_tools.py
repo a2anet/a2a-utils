@@ -21,7 +21,7 @@ from ..types import (
     ArtifactSettings,
     DataPartForLLM,
     FilePartForLLM,
-    JsonValue,
+    JsonObject,
     MessageForLLM,
     TaskForLLM,
     TaskStatusForLLM,
@@ -106,7 +106,7 @@ class A2ATools:
         context_id: str | None = None,
         task_id: str | None = None,
         timeout: float | None = None,
-        data: list[JsonValue] | None = None,
+        data: list[JsonObject] | None = None,
         files: list[str] | None = None,
     ) -> dict[str, Any]:
         """Send a message to an agent and receive a structured response.
@@ -129,7 +129,7 @@ class A2ATools:
             task_id: Attach to an existing task (for input_required flows).
             timeout: Override the default timeout in seconds.
             data: Structured data to include with the message. Each item
-                is sent as a separate JSON object or array alongside the text.
+                is sent as a separate JSON object alongside the text.
             files: Files to include with the message. Accepts local file paths
                 (read and sent as binary, max 1MB) or URLs (sent as references
                 for the remote agent to fetch).
@@ -393,9 +393,7 @@ class A2ATools:
         if self._session.file_store is not None and task.artifacts:
             saved_file_paths = {}
             for artifact in task.artifacts:
-                paths = await self._session.file_store.get_artifact(
-                    task.id, artifact.artifact_id
-                )
+                paths = await self._session.file_store.get_artifact(task.id, artifact.artifact_id)
                 if paths:
                     saved_file_paths[artifact.artifact_id] = paths
 
@@ -584,9 +582,7 @@ class A2ATools:
         file_obj = file_part.file
         name = file_obj.name if file_obj.name else None
         mime_type = (
-            file_obj.mime_type
-            if hasattr(file_obj, "mime_type") and file_obj.mime_type
-            else None
+            file_obj.mime_type if hasattr(file_obj, "mime_type") and file_obj.mime_type else None
         )
 
         if isinstance(file_obj, FileWithBytes):

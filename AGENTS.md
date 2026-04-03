@@ -7,6 +7,8 @@ Add high-level coding guidelines and review notes to this file. Specific actiona
 - Check with the user before creating a commit.
 - When proposing or writing commit messages, use backticks around code objects and use their full names, for example `FilePart`s and `A2ASession`.
 - Commit messages should be specific about the actual changes, not generic summaries.
+- If a change spans repository tooling, documentation, and fixes, prefer a high-level summary of the user-visible change set, for example `chore: add git hooks, fix build errors, and update README.md`, instead of centering the subject line on a lower-level implementation detail.
+- Prefer `README.md`, workflow files, and similar repo objects in commit subjects when those files are a meaningful part of the change.
 - Include a detailed bullet list in the commit body covering the main changes, including important related changes not explicitly discussed in chat.
 
 ## Engineering Guidelines

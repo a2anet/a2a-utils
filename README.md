@@ -9,17 +9,82 @@ There is a Python and JavaScript version:
 - Python: [A2A Utils Python](./python/README.md)
 - JavaScript: [A2A Utils JavaScript](./javascript/README.md)
 
+## 🛠️ Development
+
+1. Clone the repository and enter it:
+
+```bash
+git clone https://github.com/a2anet/a2a-utils.git
+cd a2a-utils
+```
+
+2. Install the required tools:
+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) for Python
+- [Bun](https://bun.sh/docs/installation) for JavaScript
+
+3. Install project dependencies:
+
+```bash
+make install
+```
+
+4. Install the local git hooks:
+
+```bash
+make install-hooks
+```
+
+5. Start developing. Useful commands:
+
+```bash
+make fix
+make ci
+```
+
 ## 💡 Design Decisions
 
-| Design Question | Considerations | Approach |
-|---|---|---|
-| How should a remote agent's identity be represented to the client agent? | Agent name can't be used because two remote agents might have the same name. Agent Card URL can't be used because authentication headers sent to the agent (e.g. `X-API-Key`) might change the agent. Authentication headers can't be exposed to the agent for security reasons. | `A2AAgents` and agent IDs store an Agent Card URL and custom headers. The client agent can use the agent ID to send messages to the remote agent without exposing the Agent Card URL or authentication headers to it. |
-| How should a remote agent's capabilities be represented to the client agent? | The agent's name, description, skill names, and skill descriptions are useful to the client agent. However, showing everything at once to the client agent could overload the context. The client agent should be able to view the remote agents in more depth if they need to. | `A2AAgents` and `get_agents_for_llm` returns a summary of the agents at different detail levels. The client agent can view the remote agent's Agent Card in more detail with the `get_agent_for_llm` method. |
-| What should the client agent be shown from the remote agent's response? | A remote agent returns a Task or Message. A Task is a complicated object containing the Task Status, Artifacts, a history of Task Status updates, metadata, etc. not all of which should be added to the LLM's context window. However, it's necessary to share some elements of the response with the client agent. For example, the context ID is required to continue the conversation, Artifacts are the result of the Task, etc. | `A2ATools` introduces LLM-friendly types that are subsets of A2A types: `TaskForLLM`, `MessageForLLM`, `TaskStatusForLLM`, `ArtifactForLLM`, `TextPartForLLM`, `DataPartForLLM`, and `FilePartForLLM`. `A2ASession` returns A2A types for programmatic use. |
-| How should the client agent handle large Artifacts that would overload the context? | Most LLMs have a context window of 128K tokens (~512K characters). Artifacts can easily exceed this. Even if they don't exceed this, tokens increase cost and degrade LLM output quality. | `A2ATools` automatically minimises Artifacts that are more than `send_message_character_limit` characters when JSON stringified. For text Artifacts the first `send_message_character_limit / 2` characters are shown, followed by `[... X characters omitted ...]`, followed by the last `send_message_character_limit / 2` characters. The LLM can use the `view_text_artifact` method to view the omitted characters. |
-| How should the client agent ensure that it has access to Tasks and Artifacts if the remote agent goes offline or has a retention policy? | Agent conversations can be continued days or weeks after they started. In that time, the remote agent might have gone offline or only keep Tasks and Artifacts for X days. | `A2ASession` and `JSONTaskStore` automatically save Task and Artifact(s) as JSON files. When the client agent uses tools like `view_text_artifact`, the Task Store is checked first. |
-| How should the client agent handle files? | Remote agents can send arbitrary files such as text, documents, presentations, spreadsheets, audio, images, videos, etc. The files might be Base64 encoded or sent as a downloadable URL. | `FileStore`, an abstract class similar to the `TaskStore`, and `LocalFileStore`, an implementation that saves files locally. It is out of this package's scope to implement tools to interact with them as A2A supports sending every type of file. However, if the client agent has access to Bash commands and the files are saved locally, it should be straightforward for it to interact with them. |
-| How should the client agent handle Tasks that take a long time to complete? | The default HTTP timeout is 5 seconds. Remote agents often take longer than this to send a response, causing `send_message` to timeout. It's also not good practice to set long timeouts (e.g. more than 1 minute). Even if a long timeout is set, if a response isn't recieved in that time `send_message` will throw a timeout error without a Task ID, meaning the Task can't be polled. | `send_message` always sends non-blocking messages, meaning that a Task ID is returned immediately. `send_message` then attempts to stream Task updates for `send_message_timeout`, falling back to polling if the agent doesn't support streaming. If the Task still hasn't completed after `send_message_timeout`, `get_task` can be used to get Task updates for `get_task_timeout`. `get_task` can be used as many times as neccessary until the Task is complete. |
+### How should a remote agent's identity be represented to the client agent?
+
+**Considerations:** Agent name can't be used because two remote agents might have the same name. Agent Card URL can't be used because authentication headers sent to the agent (e.g. `X-API-Key`) might change the agent. Authentication headers can't be exposed to the agent for security reasons.
+
+**Approach:** `A2AAgents` and agent IDs store an Agent Card URL and custom headers. The client agent can use the agent ID to send messages to the remote agent without exposing the Agent Card URL or authentication headers to it.
+
+### How should a remote agent's capabilities be represented to the client agent?
+
+**Considerations:** The agent's name, description, skill names, and skill descriptions are useful to the client agent. However, showing everything at once to the client agent could overload the context. The client agent should be able to view the remote agents in more depth if they need to.
+
+**Approach:** `A2AAgents` and `get_agents_for_llm` returns a summary of the agents at different detail levels. The client agent can view the remote agent's Agent Card in more detail with the `get_agent_for_llm` method.
+
+### What should the client agent be shown from the remote agent's response?
+
+**Considerations:** A remote agent returns a Task or Message. A Task is a complicated object containing the Task Status, Artifacts, a history of Task Status updates, metadata, etc. not all of which should be added to the LLM's context window. However, it's necessary to share some elements of the response with the client agent. For example, the context ID is required to continue the conversation, Artifacts are the result of the Task, etc.
+
+**Approach:** `A2ATools` introduces LLM-friendly types that are subsets of A2A types: `TaskForLLM`, `MessageForLLM`, `TaskStatusForLLM`, `ArtifactForLLM`, `TextPartForLLM`, `DataPartForLLM`, and `FilePartForLLM`. `A2ASession` returns A2A types for programmatic use.
+
+### How should the client agent handle large Artifacts that would overload the context?
+
+**Considerations:** Most LLMs have a context window of 128K tokens (~512K characters). Artifacts can easily exceed this. Even if they don't exceed this, tokens increase cost and degrade LLM output quality.
+
+**Approach:** `A2ATools` automatically minimises Artifacts that are more than `send_message_character_limit` characters when JSON stringified. For text Artifacts the first `send_message_character_limit / 2` characters are shown, followed by `[... X characters omitted ...]`, followed by the last `send_message_character_limit / 2` characters. The LLM can use the `view_text_artifact` method to view the omitted characters.
+
+### How should the client agent ensure that it has access to Tasks and Artifacts if the remote agent goes offline or has a retention policy?
+
+**Considerations:** Agent conversations can be continued days or weeks after they started. In that time, the remote agent might have gone offline or only keep Tasks and Artifacts for X days.
+
+**Approach:** `A2ASession` and `JSONTaskStore` automatically save Task and Artifact(s) as JSON files. When the client agent uses tools like `view_text_artifact`, the Task Store is checked first.
+
+### How should the client agent handle files?
+
+**Considerations:** Remote agents can send arbitrary files such as text, documents, presentations, spreadsheets, audio, images, videos, etc. The files might be Base64 encoded or sent as a downloadable URL.
+
+**Approach:** `FileStore`, an abstract class similar to the `TaskStore`, and `LocalFileStore`, an implementation that saves files locally. It is out of this package's scope to implement tools to interact with them as A2A supports sending every type of file. However, if the client agent has access to Bash commands and the files are saved locally, it should be straightforward for it to interact with them.
+
+### How should the client agent handle Tasks that take a long time to complete?
+
+**Considerations:** The default HTTP timeout is 5 seconds. Remote agents often take longer than this to send a response, causing `send_message` to timeout. It's also not good practice to set long timeouts (e.g. more than 1 minute). Even if a long timeout is set, if a response isn't received in that time `send_message` will throw a timeout error without a Task ID, meaning the Task can't be polled.
+
+**Approach:** `send_message` always sends non-blocking messages, meaning that a Task ID is returned immediately. `send_message` then attempts to stream Task updates for `send_message_timeout`, falling back to polling if the agent doesn't support streaming. If the Task still hasn't completed after `send_message_timeout`, `get_task` can be used to get Task updates for `get_task_timeout`. `get_task` can be used as many times as necessary until the Task is complete.
 
 ## 🤝 Join the A2A Net Community
 

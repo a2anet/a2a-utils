@@ -40,7 +40,15 @@ export class ArtifactSettings {
 }
 
 /** JSON-serialisable value. */
-export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+export type JsonValue =
+    | string
+    | number
+    | boolean
+    | null
+    | JsonValue[]
+    | { [key: string]: JsonValue };
+
+export type JsonObject = { [key: string]: JsonValue };
 
 // -- LLM-facing part types (simple, no SDK wrapper overhead) --
 

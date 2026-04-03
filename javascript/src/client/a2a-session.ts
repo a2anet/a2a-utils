@@ -23,7 +23,7 @@ import { InMemoryTaskStore, type TaskStore } from "@a2a-js/sdk/server";
 import { v4 as uuidv4 } from "uuid";
 import type { FileStore } from "../files/file-store.js";
 import { TERMINAL_OR_ACTIONABLE_STATES } from "../types.js";
-import type { JsonValue } from "../types.js";
+import type { JsonObject } from "../types.js";
 import type { A2AAgents } from "./a2a-agents.js";
 
 function sleep(seconds: number): Promise<void> {
@@ -116,7 +116,7 @@ export class A2ASession {
      * @param opts.timeout - HTTP timeout in seconds. Defaults to sendMessageTimeout
      *     from constructor.
      * @param opts.data - Structured data to include with the message. Each item
-     *     is sent as a separate JSON object or array alongside the text.
+     *     is sent as a separate JSON object alongside the text.
      * @param opts.files - Files to include with the message. Accepts local file
      *     paths (read and sent as binary, max 1MB) or URLs (sent as references
      *     for the remote agent to fetch).
@@ -132,7 +132,7 @@ export class A2ASession {
             contextId?: string | null;
             taskId?: string | null;
             timeout?: number | null;
-            data?: JsonValue[];
+            data?: JsonObject[];
             files?: string[];
         },
     ): Promise<Task | Message> {
@@ -146,7 +146,7 @@ export class A2ASession {
         // Add data parts
         if (opts?.data) {
             for (const d of opts.data) {
-                parts.push({ kind: "data", data: d as { [k: string]: unknown } });
+                parts.push({ kind: "data", data: d });
             }
         }
 

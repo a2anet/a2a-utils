@@ -38,7 +38,7 @@ from a2a.types import (
 from loguru import logger
 
 from ..files import FileStore
-from ..types import TERMINAL_OR_ACTIONABLE_STATES, JsonValue
+from ..types import JsonObject, TERMINAL_OR_ACTIONABLE_STATES
 from .a2a_agents import A2AAgents
 
 
@@ -108,7 +108,7 @@ class A2ASession:
         context_id: str | None = None,
         task_id: str | None = None,
         timeout: float | None = None,
-        data: list[JsonValue] | None = None,
+        data: list[JsonObject] | None = None,
         files: list[str] | None = None,
     ) -> Task | Message:
         """Send a message to an A2A agent.
@@ -122,7 +122,7 @@ class A2ASession:
             timeout: HTTP timeout in seconds. Defaults to ``send_message_timeout``
                 from ``__init__``.
             data: Structured data to include with the message. Each item
-                is sent as a separate JSON object or array alongside the text.
+                is sent as a separate JSON object alongside the text.
             files: Files to include with the message. Accepts local file paths
                 (read and sent as binary, max 1MB) or URLs (sent as references
                 for the remote agent to fetch).

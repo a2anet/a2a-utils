@@ -12,7 +12,7 @@ import type {
     ArtifactForLLM,
     DataPartForLLM,
     FilePartForLLM,
-    JsonValue,
+    JsonObject,
     MessageForLLM,
     TaskForLLM,
     TextPartForLLM,
@@ -111,7 +111,7 @@ export class A2ATools {
      * @param opts.taskId - Attach to an existing task (for input_required flows).
      * @param opts.timeout - Override the default timeout in seconds.
      * @param opts.data - Structured data to include with the message. Each item
-     *     is sent as a separate JSON object or array alongside the text.
+     *     is sent as a separate JSON object alongside the text.
      * @param opts.files - Files to include with the message. Accepts local file
      *     paths (read and sent as binary, max 1MB) or URLs (sent as references
      *     for the remote agent to fetch).
@@ -123,7 +123,7 @@ export class A2ATools {
             contextId?: string | null;
             taskId?: string | null;
             timeout?: number | null;
-            data?: JsonValue[];
+            data?: JsonObject[];
             files?: string[];
         },
     ): Promise<Record<string, unknown>> {
@@ -592,7 +592,13 @@ export class A2ATools {
 
         if ("bytes" in fileObj) {
             if (savedPaths !== null) {
-                return { kind: "file", name, mimeType, uri: null, bytes: { _saved_to: savedPaths } };
+                return {
+                    kind: "file",
+                    name,
+                    mimeType,
+                    uri: null,
+                    bytes: { _saved_to: savedPaths },
+                };
             }
             return {
                 kind: "file",
@@ -605,7 +611,13 @@ export class A2ATools {
 
         if ("uri" in fileObj) {
             if (savedPaths !== null) {
-                return { kind: "file", name, mimeType, uri: { _saved_to: savedPaths }, bytes: null };
+                return {
+                    kind: "file",
+                    name,
+                    mimeType,
+                    uri: { _saved_to: savedPaths },
+                    bytes: null,
+                };
             }
             return {
                 kind: "file",

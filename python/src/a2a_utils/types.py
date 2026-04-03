@@ -12,9 +12,8 @@ class AgentURLAndCustomHeaders:
     custom_headers: dict[str, str] = field(default_factory=dict)
 
 
-JsonValue: TypeAlias = (
-    str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
-)
+JsonValue: TypeAlias = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+JsonObject: TypeAlias = dict[str, JsonValue]
 
 TERMINAL_OR_ACTIONABLE_STATES = frozenset(
     {
