@@ -21,24 +21,6 @@
                     "arguments": ["format", "--stdin-file-path", "{buffer_path}"]
                 }
             }
-        },
-        "JSON": {
-            "format_on_save": "on",
-            "formatter": {
-                "external": {
-                    "command": "javascript/node_modules/.bin/biome",
-                    "arguments": ["format", "--stdin-file-path", "{buffer_path}"]
-                }
-            }
-        },
-        "JSONC": {
-            "format_on_save": "on",
-            "formatter": {
-                "external": {
-                    "command": "javascript/node_modules/.bin/biome",
-                    "arguments": ["format", "--stdin-file-path", "{buffer_path}"]
-                }
-            }
         }
     }
 }
