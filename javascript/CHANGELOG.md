@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/a2anet/a2a-utils/compare/a2a-utils-javascript-v0.5.0...a2a-utils-javascript-v0.6.0) (2026-04-03)
+
+
+### Features
+
+* add runtime `A2AToolDefinition` with Zod schemas to `A2ATools` ([e1d076a](https://github.com/a2anet/a2a-utils/commit/e1d076abd348d2f8d1fca69a423ea0934d9f0e1b))
+
 ## [0.5.0](https://github.com/a2anet/a2a-utils/compare/a2a-utils-javascript-v0.4.0...a2a-utils-javascript-v0.5.0) (2026-04-03)
 
 
