@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/a2anet/a2a-utils/compare/a2a-utils-javascript-v0.6.0...a2a-utils-javascript-v0.6.1) (2026-04-05)
+
+
+### Bug Fixes
+
+* round timer delays to integers in `A2ASession` ([3254196](https://github.com/a2anet/a2a-utils/commit/3254196a9f7e318d14425dd9f29790e4f3a80462))
+
 ## [0.6.0](https://github.com/a2anet/a2a-utils/compare/a2a-utils-javascript-v0.5.0...a2a-utils-javascript-v0.6.0) (2026-04-03)
 
 
