@@ -26,10 +26,6 @@ import { TERMINAL_OR_ACTIONABLE_STATES } from "../types.js";
 import type { JsonObject } from "../types.js";
 import type { A2AAgents } from "./a2a-agents.js";
 
-function sleep(seconds: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, seconds * 1000));
-}
-
 type TaskStreamEvent = TaskStatusUpdateEvent | Task;
 
 type SessionClient = A2AClient & {
@@ -183,7 +179,7 @@ export class A2ASession {
                 message: a2aMessage,
                 configuration: { blocking: false },
             },
-            { signal: AbortSignal.timeout(effectiveTimeout * 1000) },
+            { signal: AbortSignal.timeout(Math.round(effectiveTimeout * 1000)) },
         );
 
         if ("error" in response) {
@@ -413,7 +409,7 @@ export class A2ASession {
 
         try {
             const stream = this.getSessionClient(client).resubscribeTask(params, {
-                signal: AbortSignal.timeout(timeout * 1000),
+                signal: AbortSignal.timeout(Math.round(timeout * 1000)),
             });
 
             for await (const event of stream) {
@@ -462,7 +458,7 @@ export class A2ASession {
                 console.info(`Task ${taskId} still in working state after ${timeout}s`);
                 return task;
             }
-            await sleep(pollInterval);
+            await new Promise((resolve) => setTimeout(resolve, Math.round(pollInterval * 1000)));
         }
     }
 
@@ -470,7 +466,9 @@ export class A2ASession {
     private async fetchTask(client: A2AClient, taskId: string, timeout?: number): Promise<Task> {
         const response: GetTaskResponse = await this.getSessionClient(client).getTask(
             { id: taskId },
-            timeout !== undefined ? { signal: AbortSignal.timeout(timeout * 1000) } : undefined,
+            timeout !== undefined
+                ? { signal: AbortSignal.timeout(Math.round(timeout * 1000)) }
+                : undefined,
         );
 
         if ("error" in response) {
