@@ -61,7 +61,7 @@ import { A2ATools, A2ASession, A2AAgents, JSONTaskStore, LocalFileStore } from "
 import { createAgent, tool } from "langchain";
 import { ChatOpenAI } from "@langchain/openai";
 
-const agents = new A2AAgents({
+const a2aAgents = new A2AAgents({
     weather: { url: "https://weather.example.com/.well-known/agent-card.json" },
     "research-bot": {
         url: "https://research.example.com/.well-known/agent-card.json",
@@ -69,14 +69,14 @@ const agents = new A2AAgents({
     },
 });
 
-const a2aSession = new A2ASession(agents, {
+const a2aSession = new A2ASession(a2aAgents, {
     taskStore: new JSONTaskStore("./storage/tasks"),
     fileStore: new LocalFileStore("./storage/files"),
 });
 
 const a2aTools = new A2ATools(a2aSession);
 
-const langchainTools = a2aTools.toolDefinitions.map((def) =>
+const langchainTools = a2aTools.tools.map((def) =>
     tool(def.execute, { name: def.name, description: def.description, schema: def.schema }),
 );
 
@@ -89,7 +89,7 @@ const agent = createAgent({ model, tools: langchainTools });
 
 ### A2ATools
 
-Ready-made tools for agents to communicate with A2A servers. Each tool is an instance property with `name`, `description`, `schema` (Zod), and `execute`. Use the `toolDefinitions` getter for the full array.
+Ready-made tools for agents to communicate with A2A servers. Each tool is an instance property with `name`, `description`, `schema` (Zod), and `execute`. Use the `tools` getter for the full array.
 
 ```typescript
 import { A2ATools, A2ASession, A2AAgents } from "@a2anet/a2a-utils";
@@ -363,15 +363,14 @@ Programmatic interface for sending messages to A2A agents. Returns full A2A SDK 
 ```typescript
 import { A2ASession, A2AAgents, JSONTaskStore, LocalFileStore } from "@a2anet/a2a-utils";
 
-const session = new A2ASession(
-    new A2AAgents({
-        "research-bot": { url: "https://research-bot.example.com/.well-known/agent-card.json" },
-    }),
-    {
-        taskStore: new JSONTaskStore("./storage/tasks"),
-        fileStore: new LocalFileStore("./storage/files"),
-    },
-);
+const a2aAgents = new A2AAgents({
+    "research-bot": { url: "https://research-bot.example.com/.well-known/agent-card.json" },
+});
+
+const session = new A2ASession(a2aAgents, {
+    taskStore: new JSONTaskStore("./storage/tasks"),
+    fileStore: new LocalFileStore("./storage/files"),
+});
 ```
 
 | Parameter             | Type                     | Required | Description                                                         |
@@ -441,7 +440,7 @@ Manages A2A agent cards keyed by user-defined agent IDs.
 import { A2AAgents } from "@a2anet/a2a-utils";
 
 // From object
-const manager = new A2AAgents({
+const a2aAgents = new A2AAgents({
     "language-translator": {
         url: "https://example.com/language-translator/agent-card.json",
         custom_headers: { Authorization: "Bearer tok_123" },
@@ -449,10 +448,10 @@ const manager = new A2AAgents({
 });
 
 // From JSON file
-const manager2 = new A2AAgents("./agents.json");
+const a2aAgentsFromFile = new A2AAgents("./agents.json");
 
 // Empty — add agents later
-const manager3 = new A2AAgents();
+const emptyA2aAgents = new A2AAgents();
 ```
 
 #### `async getAgents(): Promise<Record<string, AgentURLAndCustomHeaders>>`
@@ -463,7 +462,7 @@ Note: this should NOT be added to the LLM's context, use `getAgentsForLlm` inste
 **Returns:** `Record<string, AgentURLAndCustomHeaders>`
 
 ```typescript
-const agents = await manager.getAgents();
+const a2aAgentConfigs = await a2aAgents.getAgents();
 ```
 
 #### `async getAgentsForLlm(detail?: string): Promise<Record<string, Record<string, unknown>>>`
@@ -479,7 +478,7 @@ Generate summary of all agents, sorted by agent_id.
 `"name"`:
 
 ```typescript
-const summaries = await manager.getAgentsForLlm("name");
+const summaries = await a2aAgents.getAgentsForLlm("name");
 ```
 
 ```json
@@ -492,7 +491,7 @@ const summaries = await manager.getAgentsForLlm("name");
 `"basic"` (default):
 
 ```typescript
-const summaries = await manager.getAgentsForLlm();
+const summaries = await a2aAgents.getAgentsForLlm();
 ```
 
 ```json
@@ -511,7 +510,7 @@ const summaries = await manager.getAgentsForLlm();
 `"skills"`:
 
 ```typescript
-const summaries = await manager.getAgentsForLlm("skills");
+const summaries = await a2aAgents.getAgentsForLlm("skills");
 ```
 
 ```json
@@ -532,7 +531,7 @@ const summaries = await manager.getAgentsForLlm("skills");
 `"full"`:
 
 ```typescript
-const summaries = await manager.getAgentsForLlm("full");
+const summaries = await a2aAgents.getAgentsForLlm("full");
 ```
 
 ```json
@@ -576,7 +575,7 @@ Note: this should NOT be added to the LLM's context, use `getAgentForLlm` instea
 **Returns:** [`AgentURLAndCustomHeaders`](#agenturlandcustomheaders) | `null`
 
 ```typescript
-const agent = await manager.getAgent("language-translator");
+const agent = await a2aAgents.getAgent("language-translator");
 ```
 
 Returns `null` if the agent ID is not registered.
@@ -593,7 +592,7 @@ Generate summary for a single agent.
 **Returns:** `Record<string, unknown> | null` — summary object or `null` if not found.
 
 ```typescript
-const summary = await manager.getAgentForLlm("language-translator");
+const summary = await a2aAgents.getAgentForLlm("language-translator");
 ```
 
 ```json
@@ -616,7 +615,7 @@ Register a new agent at runtime.
 **Throws:** `Error` if `agentId` is already registered.
 
 ```typescript
-await manager.addAgent("code-reviewer", "https://review.example.com/.well-known/agent-card.json", {
+await a2aAgents.addAgent("code-reviewer", "https://review.example.com/.well-known/agent-card.json", {
     "X-API-Key": "key_123",
 });
 ```

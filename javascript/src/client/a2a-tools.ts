@@ -118,8 +118,8 @@ const viewDataArtifactSchema = z.object({
  * A tool definition with name, description, Zod schema, and execute function.
  *
  * Individual tool properties on `A2ATools` are more specifically typed via
- * inference. This interface is used for the `toolDefinitions` array where
- * the concrete schema type is erased.
+ * inference. This interface is used for the `tools` array where the concrete
+ * schema type is erased.
  */
 export interface A2AToolDefinition {
     readonly name: string;
@@ -135,7 +135,7 @@ export interface A2AToolDefinition {
  * Each tool has LLM-friendly docstrings, returns JSON-serialisable objects, and returns actionable error messages.
  *
  * Each tool is an instance property with `name`, `description`, `schema` (Zod),
- * and `execute`. Use the `toolDefinitions` getter for the full array.
+ * and `execute`. Use the `tools` getter for the full array.
  */
 export class A2ATools {
     private readonly session: A2ASession;
@@ -408,7 +408,7 @@ export class A2ATools {
     };
 
     /** All tool definitions as an array. */
-    get toolDefinitions(): A2AToolDefinition[] {
+    get tools(): A2AToolDefinition[] {
         return [
             this.getAgents,
             this.getAgent,

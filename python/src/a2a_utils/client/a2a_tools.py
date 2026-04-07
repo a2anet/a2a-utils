@@ -1,5 +1,6 @@
 """Ready-made agent tools for A2A communication."""
 
+from collections.abc import Awaitable, Callable
 import dataclasses
 from enum import Enum
 from typing import Any, cast
@@ -21,7 +22,7 @@ from ..types import (
     ArtifactSettings,
     DataPartForLLM,
     FilePartForLLM,
-    JsonObject,
+    JsonValue,
     MessageForLLM,
     TaskForLLM,
     TaskStatusForLLM,
@@ -31,6 +32,8 @@ from .a2a_session import A2ASession
 
 TEXT_MINIMIZED_TIP = "Text was minimized. Call view_text_artifact() to view specific line ranges."
 DATA_MINIMIZED_TIP = "Data was minimized. Call view_data_artifact() to navigate to specific data."
+
+A2ATool = Callable[..., Awaitable[dict[str, Any]]]
 
 
 class A2ATools:
@@ -46,6 +49,18 @@ class A2ATools:
     ) -> None:
         self._session = session
         self._artifact_settings = artifact_settings or ArtifactSettings()
+
+    @property
+    def tools(self) -> list[A2ATool]:
+        """Return bound tool callables for agent frameworks such as LangChain."""
+        return [
+            self.get_agents,
+            self.get_agent,
+            self.send_message,
+            self.get_task,
+            self.view_text_artifact,
+            self.view_data_artifact,
+        ]
 
     async def get_agents(self) -> dict[str, Any]:
         """List all available agents with their names and descriptions.
@@ -106,7 +121,7 @@ class A2ATools:
         context_id: str | None = None,
         task_id: str | None = None,
         timeout: float | None = None,
-        data: list[JsonObject] | None = None,
+        data: list[dict[str, JsonValue]] | None = None,
         files: list[str] | None = None,
     ) -> dict[str, Any]:
         """Send a message to an agent and receive a structured response.
