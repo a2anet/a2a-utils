@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/a2anet/a2a-utils/compare/a2a-utils-python-v0.5.0...a2a-utils-python-v0.7.0) (2026-04-07)
+
+
+### Features
+
+* add `A2ATools.tools` to Python and JavaScript ([#9](https://github.com/a2anet/a2a-utils/issues/9)) ([eeff113](https://github.com/a2anet/a2a-utils/commit/eeff1139a1cb8c9ea09e46c535d21dc55e4ca22d))
+
 ## [0.5.0](https://github.com/a2anet/a2a-utils/compare/a2a-utils-python-v0.4.0...a2a-utils-python-v0.5.0) (2026-04-03)
 
 
