@@ -81,7 +81,7 @@ These are expected and should not be treated as parity bugs by themselves.
 | HTTP client/header wiring | `httpx` request kwargs | wrapped `fetch` passed to client |
 | Concurrency guard pattern | `asyncio.Lock` | single-flight `Promise` |
 | Task/file validation | Pydantic-backed SDK models | plain JS objects typed against SDK |
-| Tool definition metadata | Runtime introspection of docstrings and type hints | `A2AToolDefinition` with Zod schemas (TypeScript strips types at compile time) |
+| Tool collection metadata | `A2ATools.tools` returns bound async methods, so frameworks can reuse docstrings and type hints | `A2ATools.tools` returns `A2AToolDefinition`s with Zod schemas (TypeScript strips types at compile time) |
 
 ## Behavioral Expectations
 
@@ -92,6 +92,7 @@ These are expected and should not be treated as parity bugs by themselves.
 - `A2ATools` should keep the same six user-facing tool methods:
   `getAgents`, `getAgent`, `sendMessage`, `getTask`, `viewTextArtifact`, and `viewDataArtifact` in JavaScript;
   `get_agents`, `get_agent`, `send_message`, `get_task`, `view_text_artifact`, and `view_data_artifact` in Python.
+- `A2ATools.tools` should expose the full tool collection for agent frameworks in both packages, while preserving the intentional language-specific shape described above.
 - `FileStore` should remain behaviorally aligned in both packages:
   artifact methods are `save_artifact`/`get_artifact`/`delete_artifact` in Python and `saveArtifact`/`getArtifact`/`deleteArtifact` in JavaScript;
   message methods are `save_message`/`get_message`/`delete_message` in Python and `saveMessage`/`getMessage`/`deleteMessage` in JavaScript.
@@ -115,6 +116,9 @@ The test suites are intended to mirror the same feature areas.
 | `tests/test_a2a_agents.py` | `tests/a2a-agents.test.ts` |
 | `tests/test_file_store.py` | `tests/file-store.test.ts` |
 | `tests/test_json_task_store.py` | `tests/json-task-store.test.ts` |
+| `tests/test_a2a_session_example.py` | `tests/a2a-session-example.test.ts` |
+| `tests/test_langchain_tools_example.py` | `tests/langchain-tools-example.test.ts` |
+| `tests/test_raw_a2a_client_example.py` | `tests/raw-a2a-client-example.test.ts` |
 
 ## Maintenance Rules
 
