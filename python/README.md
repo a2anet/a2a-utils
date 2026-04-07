@@ -63,7 +63,7 @@ from a2a_utils import A2ATools, A2ASession, A2AAgents, JSONTaskStore, LocalFileS
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 
-agents = A2AAgents({
+a2a_agents = A2AAgents({
     "weather": {"url": "https://weather.example.com/.well-known/agent-card.json"},
     "research-bot": {
         "url": "https://research.example.com/.well-known/agent-card.json",
@@ -72,8 +72,8 @@ agents = A2AAgents({
 })
 
 a2a_session = A2ASession(
-    agents=agents, 
-    task_store=JSONTaskStore(Path("./storage/tasks")), 
+    agents=a2a_agents,
+    task_store=JSONTaskStore(Path("./storage/tasks")),
     file_store=LocalFileStore(Path("./storage/files"))
 )
 
@@ -81,14 +81,14 @@ a2a_tools = A2ATools(a2a_session)
 
 model = ChatOpenAI(model="gpt-5.1", reasoning={"effort": "medium"})
 
-agent = create_agent(model, tools=a2a_tools)
+agent = create_agent(model, tools=a2a_tools.tools)
 ```
 
 ## 📖 API Reference
 
 ### A2ATools
 
-Ready-made tools for agents to communicate with A2A servers. Every method has LLM-friendly docstrings, returns JSON-serialisable objects, and returns actionable error messages.
+Ready-made tools for agents to communicate with A2A servers. Every method has LLM-friendly docstrings, returns JSON-serialisable objects, and returns actionable error messages. Use the `tools` property to pass the bound methods directly to agent frameworks such as LangChain.
 
 ```python
 from a2a_utils import A2ATools, A2ASession, A2AAgents
@@ -350,10 +350,12 @@ Programmatic interface for sending messages to A2A agents. Returns full A2A SDK 
 from pathlib import Path
 from a2a_utils import A2ASession, A2AAgents, JSONTaskStore, LocalFileStore
 
+a2a_agents = A2AAgents({
+    "research-bot": {"url": "https://research-bot.example.com/.well-known/agent-card.json"}
+})
+
 session = A2ASession(
-    agents=A2AAgents({
-        "research-bot": {"url": "https://research-bot.example.com/.well-known/agent-card.json"}
-    }),
+    agents=a2a_agents,
     task_store=JSONTaskStore(Path("./storage/tasks")),
     file_store=LocalFileStore(Path("./storage/files")),
 )
@@ -427,7 +429,7 @@ Manages A2A agent cards keyed by user-defined agent IDs.
 from a2a_utils import A2AAgents
 
 # From dict
-manager = A2AAgents({
+a2a_agents = A2AAgents({
     "language-translator": {
         "url": "https://example.com/language-translator/agent-card.json",
         "custom_headers": {"Authorization": "Bearer tok_123"},
@@ -435,10 +437,10 @@ manager = A2AAgents({
 })
 
 # From JSON file
-manager = A2AAgents("./agents.json")
+a2a_agents_from_file = A2AAgents("./agents.json")
 
 # Empty — add agents later
-manager = A2AAgents()
+empty_a2a_agents = A2AAgents()
 ```
 
 #### `async get_agents() -> dict[str, AgentURLAndCustomHeaders]`
@@ -449,7 +451,7 @@ Note: this should NOT be added to the LLM's context, use `get_agents_for_llm` in
 **Returns:** `dict[str, AgentURLAndCustomHeaders]`
 
 ```python
-agents = await manager.get_agents()
+a2a_agent_configs = await a2a_agents.get_agents()
 ```
 
 Example result:
@@ -488,7 +490,7 @@ Generate summary of all agents, sorted by agent_id.
 `"name"`:
 
 ```python
-summaries = await manager.get_agents_for_llm("name")
+summaries = await a2a_agents.get_agents_for_llm("name")
 ```
 
 ```json
@@ -501,7 +503,7 @@ summaries = await manager.get_agents_for_llm("name")
 `"basic"` (default):
 
 ```python
-summaries = await manager.get_agents_for_llm()
+summaries = await a2a_agents.get_agents_for_llm()
 ```
 
 ```json
@@ -520,7 +522,7 @@ summaries = await manager.get_agents_for_llm()
 `"skills"`:
 
 ```python
-summaries = await manager.get_agents_for_llm("skills")
+summaries = await a2a_agents.get_agents_for_llm("skills")
 ```
 
 ```json
@@ -541,7 +543,7 @@ summaries = await manager.get_agents_for_llm("skills")
 `"full"`:
 
 ```python
-summaries = await manager.get_agents_for_llm("full")
+summaries = await a2a_agents.get_agents_for_llm("full")
 ```
 
 ```json
@@ -585,7 +587,7 @@ Note: this should NOT be added to the LLM's context, use `get_agent_for_llm` ins
 **Returns:** [`AgentURLAndCustomHeaders`](#agenturlandcustomheaders) | `None`
 
 ```python
-agent = await manager.get_agent("language-translator")
+agent = await a2a_agents.get_agent("language-translator")
 ```
 
 Example result:
@@ -634,7 +636,7 @@ Generate summary for a single agent.
 **Returns:** `dict[str, Any] | None` — summary dict or `None` if not found.
 
 ```python
-summary = await manager.get_agent_for_llm("language-translator")
+summary = await a2a_agents.get_agent_for_llm("language-translator")
 ```
 
 ```json
@@ -657,7 +659,7 @@ Register a new agent at runtime.
 **Raises:** `ValueError` if `agent_id` is already registered.
 
 ```python
-await manager.add_agent(
+await a2a_agents.add_agent(
     "code-reviewer",
     "https://review.example.com/.well-known/agent-card.json",
     custom_headers={"X-API-Key": "key_123"},
