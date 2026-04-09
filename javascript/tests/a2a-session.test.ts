@@ -13,6 +13,8 @@ import { A2ASession } from "../src/client/a2a-session.js";
 import { JSONTaskStore } from "../src/tasks/json-task-store.js";
 import { getA2AAgentsInternals, getSessionInternals } from "./internal-access.js";
 
+const TASK_ID = "11111111-1111-4111-8111-111111111111";
+
 function makeTmpDir(): string {
     return fs.mkdtempSync(path.join(os.tmpdir(), "a2a-test-"));
 }
@@ -83,6 +85,14 @@ describe("send message validation", () => {
         const session = new A2ASession(manager);
         await expect(session.sendMessage("nonexistent", "hello")).rejects.toThrow("not found");
     });
+
+    test("rejects non-https file URLs", async () => {
+        const manager = new A2AAgents(null);
+        const session = new A2ASession(manager);
+        await expect(
+            getSessionInternals(session).buildFilePart("http://example.com/file.txt"),
+        ).rejects.toThrow("Disallowed");
+    });
 });
 
 describe("get task validation", () => {
@@ -90,7 +100,13 @@ describe("get task validation", () => {
         const manager = new A2AAgents(null);
         getA2AAgentsInternals(manager).initialized = true;
         const session = new A2ASession(manager);
-        await expect(session.getTask("nonexistent", "task-123")).rejects.toThrow("not found");
+        await expect(session.getTask("nonexistent", TASK_ID)).rejects.toThrow("not found");
+    });
+
+    test("rejects invalid task ids before network access", async () => {
+        const manager = new A2AAgents(null);
+        const session = new A2ASession(manager);
+        await expect(session.getTask("agent-a", "task-123")).rejects.toThrow("Expected UUID");
     });
 });
 

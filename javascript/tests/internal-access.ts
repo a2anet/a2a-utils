@@ -20,6 +20,7 @@ export type A2AAgentsInternals = A2AAgents & {
 };
 
 export type A2ASessionInternals = A2ASession & {
+    buildFilePart(fileRef: string): Promise<unknown>;
     sendMessageTimeout: number;
     getTaskTimeout: number;
     getTaskPollInterval: number;

@@ -22,6 +22,10 @@ from a2a_utils.client.a2a_session import A2ASession
 from a2a_utils.client.a2a_agents import A2AAgents
 from a2a_utils.tasks.json_task_store import JSONTaskStore
 
+TASK_ID = "11111111-1111-4111-8111-111111111111"
+STATUS_MESSAGE_ID = "22222222-2222-4222-8222-222222222222"
+HISTORY_MESSAGE_ID = "33333333-3333-4333-8333-333333333333"
+
 
 class TestA2ASessionInit:
     def test_with_components(self, tmp_path: Path) -> None:
@@ -79,6 +83,13 @@ class TestSendMessageValidation:
         with pytest.raises(ValueError, match="not found"):
             await session.send_message("nonexistent", "hello")
 
+    @pytest.mark.asyncio
+    async def test_rejects_non_https_file_urls(self) -> None:
+        manager = A2AAgents(None)
+        session = A2ASession(agents=manager)
+        with pytest.raises(ValueError, match="Disallowed"):
+            await session._build_file_part("http://example.com/file.txt")
+
 
 class TestGetTaskValidation:
     @pytest.mark.asyncio
@@ -87,7 +98,14 @@ class TestGetTaskValidation:
         manager._initialized = True
         session = A2ASession(agents=manager)
         with pytest.raises(ValueError, match="not found"):
-            await session.get_task("nonexistent", "task-123")
+            await session.get_task("nonexistent", TASK_ID)
+
+    @pytest.mark.asyncio
+    async def test_rejects_invalid_task_ids_before_network_access(self) -> None:
+        manager = A2AAgents(None)
+        session = A2ASession(agents=manager)
+        with pytest.raises(ValueError, match="Expected UUID"):
+            await session.get_task("agent-a", "task-123")
 
 
 def _make_file_message(message_id: str) -> Message:
@@ -120,16 +138,19 @@ class TestSaveTaskFiles:
         session = A2ASession(agents=manager, file_store=file_store)
 
         task = Task(
-            id="task-1",
+            id=TASK_ID,
             context_id="ctx-1",
-            status=TaskStatus(state=TaskState.completed, message=_make_file_message("msg-status")),
+            status=TaskStatus(
+                state=TaskState.completed,
+                message=_make_file_message(STATUS_MESSAGE_ID),
+            ),
             artifacts=[],
             history=None,
         )
 
         await session._save_task_files(task)
 
-        file_store.get_message.assert_awaited_once_with("msg-status")
+        file_store.get_message.assert_awaited_once_with(STATUS_MESSAGE_ID)
         file_store.save_message.assert_awaited_once_with(task.status.message)
 
     @pytest.mark.asyncio
@@ -140,9 +161,9 @@ class TestSaveTaskFiles:
         file_store.save_message = AsyncMock(return_value=["/tmp/report.pdf"])
         session = A2ASession(agents=manager, file_store=file_store)
 
-        history_message = _make_file_message("msg-history")
+        history_message = _make_file_message(HISTORY_MESSAGE_ID)
         task = Task(
-            id="task-1",
+            id=TASK_ID,
             context_id="ctx-1",
             status=TaskStatus(state=TaskState.completed, message=None),
             artifacts=[],
@@ -151,7 +172,7 @@ class TestSaveTaskFiles:
 
         await session._save_task_files(task)
 
-        file_store.get_message.assert_awaited_once_with("msg-history")
+        file_store.get_message.assert_awaited_once_with(HISTORY_MESSAGE_ID)
         file_store.save_message.assert_awaited_once_with(history_message)
 
 

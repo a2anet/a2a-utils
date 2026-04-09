@@ -7,9 +7,9 @@
  */
 
 import * as fs from "node:fs/promises";
-import * as path from "node:path";
 import type { Task } from "@a2a-js/sdk";
 import type { TaskStore } from "@a2a-js/sdk/server";
+import { assertSafeStorageId, safeJoin } from "../storage/path-safety.js";
 
 /**
  * Persists Task objects as individual JSON files.
@@ -20,9 +20,9 @@ export class JSONTaskStore implements TaskStore {
     readonly _storageDir: string;
 
     constructor(storageDir: string) {
-        this._storageDir = storageDir;
+        this._storageDir = safeJoin(storageDir);
         // Ensure storage dir exists
-        fs.mkdir(storageDir, { recursive: true }).catch(() => {});
+        fs.mkdir(this._storageDir, { recursive: true }).catch(() => {});
     }
 
     /**
@@ -31,8 +31,9 @@ export class JSONTaskStore implements TaskStore {
      * @param task - The Task object to persist.
      */
     async save(task: Task): Promise<void> {
+        assertSafeStorageId("task id", task.id);
         await fs.mkdir(this._storageDir, { recursive: true });
-        const filePath = path.join(this._storageDir, `${task.id}.json`);
+        const filePath = safeJoin(this._storageDir, `${task.id}.json`);
         const data = JSON.stringify(task, null, 2);
         await fs.writeFile(filePath, data);
         console.debug(`Saved task ${task.id} to ${filePath}`);
@@ -46,7 +47,8 @@ export class JSONTaskStore implements TaskStore {
      * @returns Task if found, undefined otherwise.
      */
     async load(taskId: string): Promise<Task | undefined> {
-        const filePath = path.join(this._storageDir, `${taskId}.json`);
+        assertSafeStorageId("task id", taskId);
+        const filePath = safeJoin(this._storageDir, `${taskId}.json`);
         try {
             const text = await fs.readFile(filePath, "utf-8");
             return JSON.parse(text) as Task;
@@ -61,7 +63,8 @@ export class JSONTaskStore implements TaskStore {
      * @param taskId - The task ID to delete.
      */
     async delete(taskId: string): Promise<void> {
-        const filePath = path.join(this._storageDir, `${taskId}.json`);
+        assertSafeStorageId("task id", taskId);
+        const filePath = safeJoin(this._storageDir, `${taskId}.json`);
         try {
             await fs.unlink(filePath);
             console.debug(`Deleted task ${taskId}`);
