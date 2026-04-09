@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-export const VERSION = "0.7.0"; // x-release-please-version
+export const VERSION = "0.7.1"; // x-release-please-version
 
 // Core
 export { A2ASession } from "./client/a2a-session.js";

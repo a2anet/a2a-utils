@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/a2anet/a2a-utils/compare/a2a-utils-javascript-v0.7.0...a2a-utils-javascript-v0.7.1) (2026-04-09)
+
+
+### Bug Fixes
+
+* enforce UUID IDs and HTTPS file URI validation in `A2ASession`, `LocalFileStore`, and `JSONTaskStore` ([#12](https://github.com/a2anet/a2a-utils/issues/12)) ([6cab2c9](https://github.com/a2anet/a2a-utils/commit/6cab2c9ccecbe8cd67a4459fd9592e5a2889c915))
+
 ## [0.7.0](https://github.com/a2anet/a2a-utils/compare/a2a-utils-javascript-v0.6.1...a2a-utils-javascript-v0.7.0) (2026-04-07)
 
 
