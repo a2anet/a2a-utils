@@ -22,6 +22,12 @@ import { A2AClient } from "@a2a-js/sdk/client";
 import { InMemoryTaskStore, type TaskStore } from "@a2a-js/sdk/server";
 import { v4 as uuidv4 } from "uuid";
 import type { FileStore } from "../files/file-store.js";
+import {
+    assertMessageIdentifiers,
+    assertTaskIdentifiers,
+    assertUuid,
+    parseRemoteFileUri,
+} from "../storage/identifiers.js";
 import { TERMINAL_OR_ACTIONABLE_STATES } from "../types.js";
 import type { JsonObject } from "../types.js";
 import type { A2AAgents } from "./a2a-agents.js";
@@ -133,6 +139,9 @@ export class A2ASession {
         },
     ): Promise<Task | Message> {
         const [agentCard, headers] = await this.resolveAgent(agentId);
+        if (opts?.taskId != null) {
+            assertUuid("task id", opts.taskId);
+        }
 
         const contextId = opts?.contextId ?? uuidv4();
 
@@ -193,6 +202,7 @@ export class A2ASession {
         // Handle Message result
         if (result.kind === "message") {
             const msg = result as unknown as Message;
+            assertMessageIdentifiers(msg);
             await this.saveMessageFiles(msg);
             return msg;
         }
@@ -203,6 +213,7 @@ export class A2ASession {
         }
 
         let task = result as unknown as Task;
+        assertTaskIdentifiers(task);
         await this.taskStore.save(task);
 
         // If task is already in a terminal/actionable state, save files and return
@@ -268,6 +279,7 @@ export class A2ASession {
             pollInterval?: number | null;
         },
     ): Promise<Task> {
+        assertUuid("task id", taskId);
         const [agentCard, headers] = await this.resolveAgent(agentId);
         const effectiveTimeout =
             opts?.timeout !== undefined && opts?.timeout !== null
@@ -308,6 +320,7 @@ export class A2ASession {
      * Also saves files from the task's status message if present.
      */
     private async saveTaskFiles(task: Task): Promise<void> {
+        assertTaskIdentifiers(task);
         if (this.fileStore === null) {
             return;
         }
@@ -344,6 +357,7 @@ export class A2ASession {
      * Idempotent: skips messages whose files have already been saved.
      */
     private async saveMessageFiles(message: Message): Promise<void> {
+        assertMessageIdentifiers(message);
         if (this.fileStore === null) {
             return;
         }
@@ -360,10 +374,11 @@ export class A2ASession {
      * Build a file Part from a file path or URL.
      *
      * Local paths are read and encoded as FileWithBytes (max 1MB).
-     * URLs are passed through as FileWithUri.
+     * HTTPS URLs are passed through as FileWithUri.
      */
     private async buildFilePart(fileRef: string): Promise<Part> {
         if (A2ASession.isUrl(fileRef)) {
+            parseRemoteFileUri(fileRef);
             return {
                 kind: "file",
                 file: { uri: fileRef },
@@ -477,7 +492,9 @@ export class A2ASession {
             );
         }
 
-        return response.result as unknown as Task;
+        const task = response.result as unknown as Task;
+        assertTaskIdentifiers(task);
+        return task;
     }
 
     /** Narrow the SDK client to the methods this package relies on. */

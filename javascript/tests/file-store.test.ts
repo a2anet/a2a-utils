@@ -2,14 +2,27 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import * as dns from "node:dns/promises";
 import * as fs from "node:fs";
+import type * as http from "node:http";
+import * as https from "node:https";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { Artifact } from "@a2a-js/sdk";
+import { PassThrough } from "node:stream";
+import { gzipSync } from "node:zlib";
+import type { Artifact, Message } from "@a2a-js/sdk";
 import { minimizeArtifacts } from "../src/artifacts/index.js";
 import { LocalFileStore } from "../src/files/local-file-store.js";
 import type { FilePartForLLM } from "../src/types.js";
+
+const TASK_ID = "11111111-1111-4111-8111-111111111111";
+const MISSING_TASK_ID = "22222222-2222-4222-8222-222222222222";
+const ARTIFACT_ID = "33333333-3333-4333-8333-333333333333";
+const URI_ARTIFACT_ID = "44444444-4444-4444-8444-444444444444";
+const MISSING_ARTIFACT_ID = "55555555-5555-4555-8555-555555555555";
+const MESSAGE_ID = "66666666-6666-4666-8666-666666666666";
+const MISSING_MESSAGE_ID = "77777777-7777-4777-8777-777777777777";
 
 function makeBytesArtifact(opts?: {
     artifactId?: string;
@@ -20,7 +33,7 @@ function makeBytesArtifact(opts?: {
     const content = opts?.content ?? new TextEncoder().encode("hello world");
     const encoded = Buffer.from(content).toString("base64");
     return {
-        artifactId: opts?.artifactId ?? "art-1",
+        artifactId: opts?.artifactId ?? ARTIFACT_ID,
         parts: [
             {
                 kind: "file",
@@ -41,7 +54,7 @@ function makeUriArtifact(opts?: {
     uri?: string;
 }): Artifact {
     return {
-        artifactId: opts?.artifactId ?? "art-2",
+        artifactId: opts?.artifactId ?? URI_ARTIFACT_ID,
         parts: [
             {
                 kind: "file",
@@ -53,6 +66,50 @@ function makeUriArtifact(opts?: {
             },
         ],
     };
+}
+
+function makeMessage(messageId = MESSAGE_ID, uri?: string): Message {
+    return {
+        role: "user",
+        messageId,
+        kind: "message",
+        parts: [
+            {
+                kind: "file",
+                file: uri
+                    ? {
+                          uri,
+                          name: "message.txt",
+                          mimeType: "text/plain",
+                      }
+                    : {
+                          bytes: Buffer.from("message-body").toString("base64"),
+                          name: "message.txt",
+                          mimeType: "text/plain",
+                      },
+            },
+        ],
+    };
+}
+
+function makeMockResponse(
+    statusCode: number,
+    headers: http.IncomingHttpHeaders = {},
+    body: Buffer | string = "",
+): http.IncomingMessage {
+    const response = new PassThrough() as PassThrough & http.IncomingMessage;
+    response.statusCode = statusCode;
+    response.statusMessage = statusCode === 302 ? "Found" : "OK";
+    response.headers = headers;
+
+    queueMicrotask(() => {
+        if (body) {
+            response.write(body);
+        }
+        response.end();
+    });
+
+    return response;
 }
 
 let tmpDir: string;
@@ -71,7 +128,7 @@ describe("LocalFileStore", () => {
         const content = new TextEncoder().encode("PDF content here");
         const artifact = makeBytesArtifact({ content });
 
-        const paths = await store.saveArtifact("task-1", artifact);
+        const paths = await store.saveArtifact(TASK_ID, artifact);
 
         expect(paths.length).toBe(1);
         expect(fs.existsSync(paths[0])).toBe(true);
@@ -83,8 +140,8 @@ describe("LocalFileStore", () => {
         const store = new LocalFileStore(path.join(tmpDir, "files"));
         const artifact = makeBytesArtifact();
 
-        await store.saveArtifact("task-1", artifact);
-        const paths = await store.getArtifact("task-1", "art-1");
+        await store.saveArtifact(TASK_ID, artifact);
+        const paths = await store.getArtifact(TASK_ID, ARTIFACT_ID);
 
         expect(paths.length).toBe(1);
         expect(paths[0]).toContain("report.pdf");
@@ -92,7 +149,7 @@ describe("LocalFileStore", () => {
 
     test("get nonexistent", async () => {
         const store = new LocalFileStore(path.join(tmpDir, "files"));
-        const paths = await store.getArtifact("task-1", "nonexistent");
+        const paths = await store.getArtifact(MISSING_TASK_ID, MISSING_ARTIFACT_ID);
         expect(paths).toEqual([]);
     });
 
@@ -100,26 +157,28 @@ describe("LocalFileStore", () => {
         const store = new LocalFileStore(path.join(tmpDir, "files"));
         const artifact = makeBytesArtifact();
 
-        await store.saveArtifact("task-1", artifact);
-        const artifactDir = path.join(tmpDir, "files", "artifacts", "task-1", "art-1");
+        await store.saveArtifact(TASK_ID, artifact);
+        const artifactDir = path.join(tmpDir, "files", "artifacts", TASK_ID, ARTIFACT_ID);
         expect(fs.existsSync(artifactDir)).toBe(true);
 
-        await store.deleteArtifact("task-1", "art-1");
+        await store.deleteArtifact(TASK_ID, ARTIFACT_ID);
         expect(fs.existsSync(artifactDir)).toBe(false);
     });
 
     test("delete nonexistent", async () => {
         const store = new LocalFileStore(path.join(tmpDir, "files"));
         // Should not throw
-        await store.deleteArtifact("task-1", "nonexistent");
+        await store.deleteArtifact(MISSING_TASK_ID, MISSING_ARTIFACT_ID);
     });
 
     test("storage dir structure", async () => {
         const store = new LocalFileStore(path.join(tmpDir, "files"));
-        const artifact = makeBytesArtifact({ artifactId: "art-abc" });
-        await store.saveArtifact("task-xyz", artifact);
+        const taskId = "88888888-8888-4888-8888-888888888888";
+        const artifactId = "99999999-9999-4999-8999-999999999999";
+        const artifact = makeBytesArtifact({ artifactId });
+        await store.saveArtifact(taskId, artifact);
 
-        const expectedDir = path.join(tmpDir, "files", "artifacts", "task-xyz", "art-abc");
+        const expectedDir = path.join(tmpDir, "files", "artifacts", taskId, artifactId);
         expect(fs.statSync(expectedDir).isDirectory()).toBe(true);
         expect(fs.existsSync(path.join(expectedDir, "report.pdf"))).toBe(true);
     });
@@ -127,11 +186,165 @@ describe("LocalFileStore", () => {
     test("no file parts returns empty", async () => {
         const store = new LocalFileStore(path.join(tmpDir, "files"));
         const artifact: Artifact = {
-            artifactId: "art-text",
+            artifactId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
             parts: [{ kind: "text", text: "hello" }],
         };
-        const paths = await store.saveArtifact("task-1", artifact);
+        const paths = await store.saveArtifact(TASK_ID, artifact);
         expect(paths).toEqual([]);
+    });
+
+    test("save https uri artifact with injected downloader", async () => {
+        const fetchFileUriCalls: string[] = [];
+        const store = new LocalFileStore(path.join(tmpDir, "files"), {
+            fetchFileUri: async (uri) => {
+                fetchFileUriCalls.push(uri);
+                return new TextEncoder().encode("downloaded over https");
+            },
+        });
+
+        const paths = await store.saveArtifact(
+            TASK_ID,
+            makeUriArtifact({ uri: "https://example.com/file.txt", name: "file.txt" }),
+        );
+
+        expect(fetchFileUriCalls).toEqual(["https://example.com/file.txt"]);
+        expect(fs.readFileSync(paths[0], "utf-8")).toBe("downloaded over https");
+    });
+
+    test.each([
+        "http://127.0.0.1/secret",
+        "http://169.254.169.254/latest/meta-data",
+        "https://[::1]/secret",
+        "https://[::ffff:7f00:1]/secret",
+        "file:///etc/passwd",
+        "not a url",
+    ])("rejects unsafe remote uri %s", async (uri) => {
+        const store = new LocalFileStore(path.join(tmpDir, "files"));
+        await expect(
+            store.saveArtifact(TASK_ID, makeUriArtifact({ uri, name: "bad.txt" })),
+        ).rejects.toThrow();
+    });
+
+    test("default downloader rejects redirects to private targets", async () => {
+        const store = new LocalFileStore(path.join(tmpDir, "files"));
+        const lookupSpy = spyOn(dns, "lookup").mockResolvedValue([
+            { address: "93.184.216.34", family: 4 },
+        ]);
+        const requestSpy = spyOn(https, "request").mockImplementation(((options, callback) => {
+            queueMicrotask(() => {
+                callback?.(
+                    makeMockResponse(302, {
+                        location: "https://169.254.169.254/latest/meta-data",
+                    }),
+                );
+            });
+            return new PassThrough() as unknown as http.ClientRequest;
+        }) as typeof https.request);
+
+        try {
+            await expect(
+                store.saveArtifact(
+                    TASK_ID,
+                    makeUriArtifact({
+                        uri: "https://example.com/start",
+                        name: "redirect.txt",
+                    }),
+                ),
+            ).rejects.toThrow(/blocked remote file host/i);
+            expect(lookupSpy).toHaveBeenCalledWith("example.com", { all: true, verbatim: true });
+            expect(requestSpy).toHaveBeenCalledTimes(1);
+        } finally {
+            lookupSpy.mockRestore();
+            requestSpy.mockRestore();
+        }
+    });
+
+    test("default downloader pins the resolved address on the request", async () => {
+        const store = new LocalFileStore(path.join(tmpDir, "files"));
+        const lookupSpy = spyOn(dns, "lookup").mockResolvedValue([
+            { address: "93.184.216.34", family: 4 },
+        ]);
+        const requestOptions: https.RequestOptions[] = [];
+        const requestSpy = spyOn(https, "request").mockImplementation(((options, callback) => {
+            requestOptions.push(options as https.RequestOptions);
+            queueMicrotask(() => {
+                callback?.(makeMockResponse(200, { "content-length": "18" }, "resolved download"));
+            });
+            return new PassThrough() as unknown as http.ClientRequest;
+        }) as typeof https.request);
+
+        try {
+            const paths = await store.saveArtifact(
+                TASK_ID,
+                makeUriArtifact({ uri: "https://example.com/file.txt", name: "file.txt" }),
+            );
+
+            expect(lookupSpy).toHaveBeenCalledWith("example.com", { all: true, verbatim: true });
+            expect(requestOptions).toHaveLength(1);
+            expect(requestOptions[0].hostname).toBe("93.184.216.34");
+            expect(requestOptions[0].headers).toMatchObject({
+                "Accept-Encoding": "identity",
+                Host: "example.com",
+            });
+            expect(requestOptions[0].servername).toBe("example.com");
+            expect(fs.readFileSync(paths[0], "utf-8")).toBe("resolved download");
+        } finally {
+            lookupSpy.mockRestore();
+            requestSpy.mockRestore();
+        }
+    });
+
+    test("default downloader decodes gzip responses before saving", async () => {
+        const store = new LocalFileStore(path.join(tmpDir, "files"));
+        const lookupSpy = spyOn(dns, "lookup").mockResolvedValue([
+            { address: "93.184.216.34", family: 4 },
+        ]);
+        const compressed = gzipSync("decoded download");
+        const requestSpy = spyOn(https, "request").mockImplementation(((options, callback) => {
+            queueMicrotask(() => {
+                callback?.(
+                    makeMockResponse(
+                        200,
+                        {
+                            "content-encoding": "gzip",
+                            "content-length": String(compressed.length),
+                        },
+                        compressed,
+                    ),
+                );
+            });
+            return new PassThrough() as unknown as http.ClientRequest;
+        }) as typeof https.request);
+
+        try {
+            const paths = await store.saveArtifact(
+                TASK_ID,
+                makeUriArtifact({ uri: "https://example.com/file.txt", name: "file.txt" }),
+            );
+
+            expect(fs.readFileSync(paths[0], "utf-8")).toBe("decoded download");
+        } finally {
+            lookupSpy.mockRestore();
+            requestSpy.mockRestore();
+        }
+    });
+
+    test.each([
+        { taskId: "../escape", artifactId: ARTIFACT_ID, messageId: MESSAGE_ID },
+        { taskId: TASK_ID, artifactId: "../escape", messageId: MESSAGE_ID },
+        { taskId: TASK_ID, artifactId: ARTIFACT_ID, messageId: "../escape" },
+    ])("rejects traversal ids %#", async ({ taskId, artifactId, messageId }) => {
+        const store = new LocalFileStore(path.join(tmpDir, "files"));
+
+        if (taskId !== TASK_ID || artifactId !== ARTIFACT_ID) {
+            await expect(
+                store.saveArtifact(taskId, makeBytesArtifact({ artifactId })),
+            ).rejects.toThrow(/invalid/i);
+        }
+
+        if (messageId !== MESSAGE_ID) {
+            await expect(store.saveMessage(makeMessage(messageId))).rejects.toThrow(/invalid/i);
+        }
     });
 });
 
@@ -139,7 +352,7 @@ describe("file part handling", () => {
     test("minimize with saved file paths", () => {
         const artifact = makeBytesArtifact();
         const result = minimizeArtifacts([artifact], {
-            savedFilePaths: { "art-1": ["/storage/task-1/art-1/report.pdf"] },
+            savedFilePaths: { [ARTIFACT_ID]: ["/storage/task-1/art-1/report.pdf"] },
         });
 
         expect(result.length).toBe(1);
@@ -181,7 +394,7 @@ describe("file part handling", () => {
     test("minimize uri with saved file paths", () => {
         const artifact = makeUriArtifact();
         const result = minimizeArtifacts([artifact], {
-            savedFilePaths: { "art-2": ["/storage/task-1/art-2/image.png"] },
+            savedFilePaths: { [URI_ARTIFACT_ID]: ["/storage/task-1/art-2/image.png"] },
         });
 
         const fileParts = result[0].parts.filter((p) => p.kind === "file") as FilePartForLLM[];

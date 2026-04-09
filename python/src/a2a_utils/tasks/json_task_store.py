@@ -7,6 +7,7 @@ from pathlib import Path
 from a2a.server.tasks import TaskStore
 from a2a.types import Task
 from loguru import logger
+from a2a_utils.storage import assert_safe_storage_id, safe_join
 
 
 class JSONTaskStore(TaskStore):
@@ -17,7 +18,7 @@ class JSONTaskStore(TaskStore):
     """
 
     def __init__(self, storage_dir: Path) -> None:
-        self._storage_dir = storage_dir
+        self._storage_dir = safe_join(storage_dir)
         self._storage_dir.mkdir(parents=True, exist_ok=True)
         self._lock = asyncio.Lock()
 
@@ -28,7 +29,8 @@ class JSONTaskStore(TaskStore):
             task: The Task object to persist.
         """
         async with self._lock:
-            file_path = self._storage_dir / f"{task.id}.json"
+            assert_safe_storage_id("task id", task.id)
+            file_path = safe_join(self._storage_dir, f"{task.id}.json")
             data = task.model_dump(mode="json")
             file_path.write_text(json.dumps(data, indent=2))
             logger.debug(f"Saved task {task.id} to {file_path}")
@@ -42,7 +44,8 @@ class JSONTaskStore(TaskStore):
         Returns:
             Task if found, None otherwise.
         """
-        file_path = self._storage_dir / f"{task_id}.json"
+        assert_safe_storage_id("task id", task_id)
+        file_path = safe_join(self._storage_dir, f"{task_id}.json")
         if not file_path.exists():
             return None
 
@@ -60,7 +63,8 @@ class JSONTaskStore(TaskStore):
             task_id: The task ID to delete.
         """
         async with self._lock:
-            file_path = self._storage_dir / f"{task_id}.json"
+            assert_safe_storage_id("task id", task_id)
+            file_path = safe_join(self._storage_dir, f"{task_id}.json")
             if file_path.exists():
                 file_path.unlink()
                 logger.debug(f"Deleted task {task_id}")

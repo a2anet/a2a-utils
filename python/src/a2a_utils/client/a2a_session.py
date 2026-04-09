@@ -38,6 +38,12 @@ from a2a.types import (
 from loguru import logger
 
 from ..files import FileStore
+from ..storage import (
+    assert_message_identifiers,
+    assert_task_identifiers,
+    assert_uuid,
+    parse_remote_file_uri,
+)
 from ..types import JsonObject, TERMINAL_OR_ACTIONABLE_STATES
 from .a2a_agents import A2AAgents
 
@@ -135,6 +141,8 @@ class A2ASession:
             A2AClientJSONRPCError: On JSON-RPC error from the agent.
         """
         agent_card, headers = await self._resolve_agent(agent_id)
+        if task_id is not None:
+            assert_uuid("task id", task_id)
 
         if context_id is None:
             context_id = str(uuid.uuid4())
@@ -195,6 +203,7 @@ class A2ASession:
 
         # Handle Message result
         if isinstance(result, Message):
+            assert_message_identifiers(result)
             await self._save_message_files(result)
             return result
 
@@ -203,6 +212,7 @@ class A2ASession:
             raise ValueError(f"Expected Task or Message response, got {type(result).__name__}")
 
         task = result
+        assert_task_identifiers(task)
         await self.task_store.save(task)
 
         # If task is already in a terminal/actionable state, save files and return
@@ -261,6 +271,7 @@ class A2ASession:
         Raises:
             ValueError: If agent is not found.
         """
+        assert_uuid("task id", task_id)
         agent_card, headers = await self._resolve_agent(agent_id)
         effective_timeout = timeout if timeout is not None else self._get_task_timeout
         effective_poll_interval = (
@@ -285,6 +296,7 @@ class A2ASession:
     async def _build_file_part(self, file_ref: str) -> FilePart:
         """Build a FilePart from a file path or URL."""
         if file_ref.startswith("http://") or file_ref.startswith("https://"):
+            parse_remote_file_uri(file_ref)
             return FilePart(file=FileWithUri(uri=file_ref))
 
         file_path = Path(file_ref)
@@ -310,6 +322,7 @@ class A2ASession:
 
         Idempotent: skips artifacts whose files have already been saved.
         """
+        assert_task_identifiers(task)
         if self.file_store is None:
             return
 
@@ -335,6 +348,7 @@ class A2ASession:
 
         Idempotent: skips messages whose files have already been saved.
         """
+        assert_message_identifiers(message)
         if self.file_store is None:
             return
         has_files = any(isinstance(p.root, FilePart) for p in message.parts)
@@ -444,6 +458,7 @@ class A2ASession:
         if not isinstance(result, Task):
             raise ValueError(f"Expected Task response, got {type(result).__name__}")
 
+        assert_task_identifiers(result)
         return result
 
     async def _resolve_agent(self, agent_id: str) -> tuple[AgentCard, dict[str, str]]:

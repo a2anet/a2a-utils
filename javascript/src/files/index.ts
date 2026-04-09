@@ -3,4 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 export type { FileStore } from "./file-store.js";
+export type {
+    LocalFileStoreFetchFileUri,
+    LocalFileStoreFetchResult,
+    LocalFileStoreOptions,
+} from "./local-file-store.js";
 export { LocalFileStore } from "./local-file-store.js";

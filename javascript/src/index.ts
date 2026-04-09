@@ -16,6 +16,11 @@ export { DataArtifacts, TextArtifacts, minimizeArtifacts } from "./artifacts/ind
 
 // Files
 export type { FileStore } from "./files/file-store.js";
+export type {
+    LocalFileStoreFetchFileUri,
+    LocalFileStoreFetchResult,
+    LocalFileStoreOptions,
+} from "./files/local-file-store.js";
 export { LocalFileStore } from "./files/local-file-store.js";
 
 // Types
