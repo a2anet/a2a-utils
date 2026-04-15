@@ -333,6 +333,9 @@ describe("LocalFileStore", () => {
         { taskId: "../escape", artifactId: ARTIFACT_ID, messageId: MESSAGE_ID },
         { taskId: TASK_ID, artifactId: "../escape", messageId: MESSAGE_ID },
         { taskId: TASK_ID, artifactId: ARTIFACT_ID, messageId: "../escape" },
+        { taskId: "task/escape", artifactId: ARTIFACT_ID, messageId: MESSAGE_ID },
+        { taskId: TASK_ID, artifactId: "artifact/escape", messageId: MESSAGE_ID },
+        { taskId: TASK_ID, artifactId: ARTIFACT_ID, messageId: "message/escape" },
     ])("rejects traversal ids %#", async ({ taskId, artifactId, messageId }) => {
         const store = new LocalFileStore(path.join(tmpDir, "files"));
 
@@ -345,6 +348,24 @@ describe("LocalFileStore", () => {
         if (messageId !== MESSAGE_ID) {
             await expect(store.saveMessage(makeMessage(messageId))).rejects.toThrow(/invalid/i);
         }
+    });
+
+    test("accepts opaque response-style ids", async () => {
+        const store = new LocalFileStore(path.join(tmpDir, "files"));
+        const taskId = "task-1";
+        const artifactId = "artifact-1";
+        const messageId = "resp_04d5f520890c81ff0069deeb2650e08196b2fa18cc08f9f3d9_1";
+
+        const artifactPaths = await store.saveArtifact(
+            taskId,
+            makeBytesArtifact({ artifactId, content: new TextEncoder().encode("artifact") }),
+        );
+        const messagePaths = await store.saveMessage(makeMessage(messageId));
+
+        expect(artifactPaths).toHaveLength(1);
+        expect(messagePaths).toHaveLength(1);
+        expect(fs.readFileSync(artifactPaths[0], "utf-8")).toBe("artifact");
+        expect(fs.readFileSync(messagePaths[0], "utf-8")).toBe("message-body");
     });
 });
 

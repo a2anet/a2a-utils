@@ -323,6 +323,32 @@ class TestLocalFileStore:
             await store.save_artifact(TASK_ID, _make_bytes_artifact(artifact_id="../escape"))
         with pytest.raises(ValueError, match="Invalid"):
             await store.save_message(_make_bytes_message(message_id="../escape"))
+        with pytest.raises(ValueError, match="Invalid"):
+            await store.save_artifact("task/escape", _make_bytes_artifact())
+        with pytest.raises(ValueError, match="Invalid"):
+            await store.save_artifact(TASK_ID, _make_bytes_artifact(artifact_id="artifact/escape"))
+        with pytest.raises(ValueError, match="Invalid"):
+            await store.save_message(_make_bytes_message(message_id="message/escape"))
+
+    @pytest.mark.asyncio
+    async def test_accepts_opaque_response_style_ids(self, tmp_path: Path) -> None:
+        store = LocalFileStore(tmp_path / "files")
+        task_id = "task-1"
+        artifact_id = "artifact-1"
+        message_id = "resp_04d5f520890c81ff0069deeb2650e08196b2fa18cc08f9f3d9_1"
+
+        artifact_paths = await store.save_artifact(
+            task_id,
+            _make_bytes_artifact(artifact_id=artifact_id, content=b"artifact"),
+        )
+        message_paths = await store.save_message(
+            _make_bytes_message(message_id=message_id, content=b"message-body")
+        )
+
+        assert len(artifact_paths) == 1
+        assert len(message_paths) == 1
+        assert Path(artifact_paths[0]).read_bytes() == b"artifact"
+        assert Path(message_paths[0]).read_bytes() == b"message-body"
 
 
 class TestLocalFileStoreMessages:

@@ -2,6 +2,7 @@
 
 from a2a_utils.storage.identifiers import (
     DEFAULT_REMOTE_FILE_URI_SCHEMES,
+    assert_identifier,
     assert_message_identifiers,
     assert_task_identifiers,
     assert_uuid,
@@ -12,6 +13,7 @@ from a2a_utils.storage.path_safety import assert_safe_storage_id, assert_within_
 
 __all__ = [
     "DEFAULT_REMOTE_FILE_URI_SCHEMES",
+    "assert_identifier",
     "assert_message_identifiers",
     "assert_safe_storage_id",
     "assert_task_identifiers",

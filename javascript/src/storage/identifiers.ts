@@ -5,6 +5,7 @@
 import type { Message, Task } from "@a2a-js/sdk";
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const IDENTIFIER_RE = /^[A-Za-z0-9._-]+$/;
 export const DEFAULT_REMOTE_FILE_URI_SCHEMES = ["https:"];
 
 type ParseRemoteFileUriOptions = {
@@ -18,17 +19,23 @@ export function assertUuid(name: string, value: string): void {
     }
 }
 
+export function assertIdentifier(name: string, value: string): void {
+    if (!IDENTIFIER_RE.test(value) || value === "." || value === "..") {
+        throw new Error(`Invalid ${name}: '${value}'. Expected letters, numbers, '.', '_' or '-'.`);
+    }
+}
+
 export function assertMessageIdentifiers(message: Message): void {
-    assertUuid("message id", message.messageId);
+    assertIdentifier("message id", message.messageId);
     if (message.taskId != null) {
-        assertUuid("task id", message.taskId);
+        assertIdentifier("task id", message.taskId);
     }
 }
 
 export function assertTaskIdentifiers(task: Task): void {
-    assertUuid("task id", task.id);
+    assertIdentifier("task id", task.id);
     for (const artifact of task.artifacts ?? []) {
-        assertUuid("artifact id", artifact.artifactId);
+        assertIdentifier("artifact id", artifact.artifactId);
     }
     if (task.status.message != null) {
         assertMessageIdentifiers(task.status.message as Message);

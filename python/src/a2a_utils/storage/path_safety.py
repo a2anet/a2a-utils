@@ -1,15 +1,15 @@
 """Path safety utilities for filesystem-backed storage."""
 
 from pathlib import Path
-from .identifiers import UUID_RE, assert_uuid
+from .identifiers import IDENTIFIER_RE, assert_identifier
 
-SAFE_STORAGE_ID_RE = UUID_RE
+SAFE_STORAGE_ID_RE = IDENTIFIER_RE
 
 
 def assert_safe_storage_id(name: str, value: str) -> None:
     """Reject IDs that could escape or corrupt the storage layout."""
 
-    assert_uuid(name, value)
+    assert_identifier(name, value)
 
 
 def assert_within_root(root: Path, target: Path) -> None:

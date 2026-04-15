@@ -82,7 +82,7 @@ class TestJSONTaskStore:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         "task_id",
-        [".", "task-1", "../evil", "/tmp/evil", "dir/name", "dir\\name", "task:1"],
+        [".", "../evil", "/tmp/evil", "dir/name", "dir\\name", "task:1"],
     )
     async def test_rejects_unsafe_task_ids(self, store: JSONTaskStore, task_id: str) -> None:
         with pytest.raises(ValueError, match="Invalid"):
@@ -103,3 +103,14 @@ class TestJSONTaskStore:
                 await store.get("../outside")
 
         read_text.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_accepts_opaque_response_style_task_ids(self, store: JSONTaskStore) -> None:
+        task_id = "resp_04d5f520890c81ff0069deeb2650e08196b2fa18cc08f9f3d9_1"
+        task = _make_task(task_id, "ctx-resp")
+
+        await store.save(task)
+        loaded = await store.get(task_id)
+
+        assert loaded is not None
+        assert loaded.id == task_id

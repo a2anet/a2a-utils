@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import * as path from "node:path";
-import { UUID_RE, assertUuid } from "./identifiers.js";
+import { IDENTIFIER_RE, assertIdentifier } from "./identifiers.js";
 
-export const SAFE_STORAGE_ID_RE = UUID_RE;
+export const SAFE_STORAGE_ID_RE = IDENTIFIER_RE;
 
 export function assertSafeStorageId(name: string, value: string): void {
-    assertUuid(name, value);
+    assertIdentifier(name, value);
 }
 
 export function assertWithinRoot(root: string, target: string): void {
