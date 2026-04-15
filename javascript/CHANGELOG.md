@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/a2anet/a2a-utils/compare/a2a-utils-javascript-v0.7.1...a2a-utils-javascript-v0.7.2) (2026-04-15)
+
+
+### Bug Fixes
+
+* allow valid file paths instead of requiring UUIDs for `Message`, `Task`, and `Artifact` ids ([#14](https://github.com/a2anet/a2a-utils/issues/14)) ([0f5608e](https://github.com/a2anet/a2a-utils/commit/0f5608e62033ed0679991f9663ea6384530edb5a))
+
 ## [0.7.1](https://github.com/a2anet/a2a-utils/compare/a2a-utils-javascript-v0.7.0...a2a-utils-javascript-v0.7.1) (2026-04-09)
 
 
