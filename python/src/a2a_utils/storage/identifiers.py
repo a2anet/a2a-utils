@@ -9,6 +9,7 @@ from a2a.types import Message, Task
 UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
 )
+IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 DEFAULT_REMOTE_FILE_URI_SCHEMES = ("https:",)
 
 
@@ -19,21 +20,28 @@ def assert_uuid(name: str, value: str) -> None:
         raise ValueError(f"Invalid {name}: '{value}'. Expected UUID.")
 
 
+def assert_identifier(name: str, value: str) -> None:
+    """Ensure an A2A identifier uses the filesystem-safe character set."""
+
+    if IDENTIFIER_RE.fullmatch(value) is None or value in {".", ".."}:
+        raise ValueError(f"Invalid {name}: '{value}'. Expected letters, numbers, '.', '_' or '-'.")
+
+
 def assert_message_identifiers(message: Message) -> None:
     """Validate the message and attached task IDs carried in a message envelope."""
 
-    assert_uuid("message id", message.message_id)
+    assert_identifier("message id", message.message_id)
     if message.task_id is not None:
-        assert_uuid("task id", message.task_id)
+        assert_identifier("task id", message.task_id)
 
 
 def assert_task_identifiers(task: Task) -> None:
     """Validate task, artifact, and nested message IDs."""
 
-    assert_uuid("task id", task.id)
+    assert_identifier("task id", task.id)
     if task.artifacts:
         for artifact in task.artifacts:
-            assert_uuid("artifact id", artifact.artifact_id)
+            assert_identifier("artifact id", artifact.artifact_id)
     if task.status.message is not None:
         assert_message_identifiers(task.status.message)
     if task.history:

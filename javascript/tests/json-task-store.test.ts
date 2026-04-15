@@ -94,7 +94,7 @@ describe("JSONTaskStore", () => {
         // The dir is created on first save anyway
     });
 
-    test.each([".", "task-1", "../evil", "/tmp/evil", "dir/name", "dir\\name", "task:1"])(
+    test.each([".", "../evil", "/tmp/evil", "dir/name", "dir\\name", "task:1"])(
         "rejects unsafe task ids: %s",
         async (taskId) => {
             const store = new JSONTaskStore(path.join(tmpDir, "tasks"));
@@ -104,6 +104,18 @@ describe("JSONTaskStore", () => {
             await expect(store.delete(taskId)).rejects.toThrow(/invalid/i);
         },
     );
+
+    test("accepts opaque response-style task ids", async () => {
+        const store = new JSONTaskStore(path.join(tmpDir, "tasks"));
+        const taskId = "resp_04d5f520890c81ff0069deeb2650e08196b2fa18cc08f9f3d9_1";
+        const task = makeTask(taskId, "ctx-resp");
+
+        await store.save(task);
+        const loaded = await store.load(taskId);
+
+        expect(loaded).toBeDefined();
+        expect(loaded?.id).toBe(taskId);
+    });
 
     test("unsafe load does not read outside storage root", async () => {
         const store = new JSONTaskStore(path.join(tmpDir, "tasks"));

@@ -103,10 +103,10 @@ describe("get task validation", () => {
         await expect(session.getTask("nonexistent", TASK_ID)).rejects.toThrow("not found");
     });
 
-    test("rejects invalid task ids before network access", async () => {
+    test("rejects unsafe task ids before network access", async () => {
         const manager = new A2AAgents(null);
         const session = new A2ASession(manager);
-        await expect(session.getTask("agent-a", "task-123")).rejects.toThrow("Expected UUID");
+        await expect(session.getTask("agent-a", "task/123")).rejects.toThrow("Invalid task id");
     });
 });
 

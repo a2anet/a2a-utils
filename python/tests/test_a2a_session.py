@@ -101,11 +101,11 @@ class TestGetTaskValidation:
             await session.get_task("nonexistent", TASK_ID)
 
     @pytest.mark.asyncio
-    async def test_rejects_invalid_task_ids_before_network_access(self) -> None:
+    async def test_rejects_unsafe_task_ids_before_network_access(self) -> None:
         manager = A2AAgents(None)
         session = A2ASession(agents=manager)
-        with pytest.raises(ValueError, match="Expected UUID"):
-            await session.get_task("agent-a", "task-123")
+        with pytest.raises(ValueError, match="Invalid task id"):
+            await session.get_task("agent-a", "task/123")
 
 
 def _make_file_message(message_id: str) -> Message:

@@ -23,9 +23,9 @@ import { InMemoryTaskStore, type TaskStore } from "@a2a-js/sdk/server";
 import { v4 as uuidv4 } from "uuid";
 import type { FileStore } from "../files/file-store.js";
 import {
+    assertIdentifier,
     assertMessageIdentifiers,
     assertTaskIdentifiers,
-    assertUuid,
     parseRemoteFileUri,
 } from "../storage/identifiers.js";
 import { TERMINAL_OR_ACTIONABLE_STATES } from "../types.js";
@@ -140,7 +140,7 @@ export class A2ASession {
     ): Promise<Task | Message> {
         const [agentCard, headers] = await this.resolveAgent(agentId);
         if (opts?.taskId != null) {
-            assertUuid("task id", opts.taskId);
+            assertIdentifier("task id", opts.taskId);
         }
 
         const contextId = opts?.contextId ?? uuidv4();
@@ -279,7 +279,7 @@ export class A2ASession {
             pollInterval?: number | null;
         },
     ): Promise<Task> {
-        assertUuid("task id", taskId);
+        assertIdentifier("task id", taskId);
         const [agentCard, headers] = await this.resolveAgent(agentId);
         const effectiveTimeout =
             opts?.timeout !== undefined && opts?.timeout !== null

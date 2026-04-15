@@ -39,9 +39,9 @@ from loguru import logger
 
 from ..files import FileStore
 from ..storage import (
+    assert_identifier,
     assert_message_identifiers,
     assert_task_identifiers,
-    assert_uuid,
     parse_remote_file_uri,
 )
 from ..types import JsonObject, TERMINAL_OR_ACTIONABLE_STATES
@@ -142,7 +142,7 @@ class A2ASession:
         """
         agent_card, headers = await self._resolve_agent(agent_id)
         if task_id is not None:
-            assert_uuid("task id", task_id)
+            assert_identifier("task id", task_id)
 
         if context_id is None:
             context_id = str(uuid.uuid4())
@@ -271,7 +271,7 @@ class A2ASession:
         Raises:
             ValueError: If agent is not found.
         """
-        assert_uuid("task id", task_id)
+        assert_identifier("task id", task_id)
         agent_card, headers = await self._resolve_agent(agent_id)
         effective_timeout = timeout if timeout is not None else self._get_task_timeout
         effective_poll_interval = (
