@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.3](https://github.com/a2anet/a2a-utils/compare/a2a-utils-python-v0.7.2...a2a-utils-python-v0.7.3) (2026-05-25)
+
+
+### Bug Fixes
+
+* cap `a2a-sdk<1.0` and `@a2a-js/sdk<1.0.0` to avoid breaking 1.0 imports ([#17](https://github.com/a2anet/a2a-utils/issues/17)) ([1bbecd9](https://github.com/a2anet/a2a-utils/commit/1bbecd935d101c861ffc4e49ff77ee4fa4cacd85))
+
 ## [0.7.2](https://github.com/a2anet/a2a-utils/compare/a2a-utils-python-v0.7.1...a2a-utils-python-v0.7.2) (2026-04-15)
 
 
